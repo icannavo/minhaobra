@@ -18,9 +18,12 @@ declare module "express" {
     clearCookie(name: string, options?: any): this;
     redirect(status: number, url: string): void;
     redirect(url: string): void;
-    set(field: string, value: string): this;
+    set(field: string, value?: string): this;
+    set(headers: Record<string, string>): this;
     end(data?: any): void;
   }
+
+  export type NextFunction = (err?: any) => void;
 
   export interface Express {
     get(path: string, ...handlers: any[]): void;
