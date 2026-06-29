@@ -1,18 +1,22 @@
 {
   "version": 2,
   "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist/public",
   "rewrites": [
     {
-      "source": "/assets/(.*)",
-      "destination": "/dist/public/assets/$1"
-    },
-    {
-      "source": "/api/trpc/(.*)",
-      "destination": "/server/_core/index.ts"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
       "source": "/(.*)",
-      "destination": "/server/_core/index.ts"
+      "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
 }
