@@ -1,925 +1,698 @@
-import React, { useState } from "react";
-import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  CheckCircle2, Plus, Trash2, ArrowRight, ArrowLeft, 
-  Home, Briefcase, Calendar, Users, MapPin, Building2,
-  CheckCheck, Sparkles
-} from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import React, { useState, useCallback } from "react";
+import { motion } from "framer-motion";
 import { useLocation } from "wouter";
+import { Step3Rooms } from "./NewProject/Step3Rooms";
+import { Step4Details } from "./NewProject/Step4Details";
+import { 
+  Plus, 
+  Trash2, 
+  ChevronRight, 
+  ChevronLeft,
+  Check,
+  Home,
+  Paintbrush,
+  Hammer,
+  Layers,
+  Users,
+  Calendar,
+  MapPin,
+  Building,
+  AlertCircle
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
 
+// ==================== TYPES ====================
 interface Room {
   id: string;
   name: string;
-  type: string;
   area: number;
-  hasFloor: boolean;
   floorType: string;
-  hasPainting: boolean;
-  hasPlumbing: boolean;
-  hasElectrical: boolean;
-  notes: string;
+  characteristics: string[];
 }
 
-interface ProjectData {
+interface FormData {
+  type: string;
+  items: {
+    epis: string[];
+    tools: string[];
+    materials: string[];
+    equipment: string[];
+  };
+  rooms: Room[];
   name: string;
   location: string;
-  restorationType: string[];
-  selectedItems: string[];
-  rooms: Room[];
-  numberOfEmployees: number;
+  employees: number;
   startDate: string;
-  workOnSaturday: boolean;
-  workOnSunday: boolean;
+  workDays: string[];
 }
 
+// ==================== CONSTANTS ====================
 const RESTORATION_TYPES = [
-  { id: "external-paint", name: "Pintura Externa", icon: Building2, color: "blue" },
-  { id: "internal-paint", name: "Pintura Interna", icon: Home, color: "purple" },
-  { id: "facade", name: "Restauração Fachada", icon: Building2, color: "orange" },
-  { id: "cleaning", name: "Limpeza Fachada", icon: Sparkles, color: "green" },
-  { id: "cracks", name: "Tratamento Trincas", icon: Building2, color: "red" },
-  { id: "bathroom", name: "Banheiro", icon: Home, color: "cyan" },
-  { id: "internal-house", name: "Casa Interna", icon: Home, color: "indigo" },
-  { id: "full-house", name: "Casa Inteira", icon: Briefcase, color: "pink" },
-];
-
-const pageVariants = {
-  initial: { opacity: 0, x: 20 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -20 }
-};
-
-const stepConfig = [
-  { id: "type", label: "Tipo", icon: Briefcase },
-  { id: "items", label: "Itens", icon: CheckCheck },
-  { id: "rooms", label: "Cômodos", icon: Home },
-  { id: "details", label: "Detalhes", icon: Users },
-  { id: "calendar", label: "Resumo", icon: Calendar },
+  { 
+    id: "fachada", 
+    label: "Restauração de Fachada",
+    icon: Building,
+    description: "Limpeza, restauro e pintura de fachadas externas"
+  },
+  { 
+    id: "interna", 
+    label: "Pintura Interna", 
+    icon: Home,
+    description: "Pintura de ambientes internos residenciais e comerciais"
+  },
+  { 
+    id: "externa", 
+    label: "Pintura Externa", 
+    icon: Paintbrush,
+    description: "Pintura de áreas externas e muros"
+  },
+  { 
+    id: "textura", 
+    label: "Aplicação de Textura", 
+    icon: Layers,
+    description: "Aplicação de texturas decorativas e revestimentos"
+  },
+  { 
+    id: "geral", 
+    label: "Restauração Geral", 
+    icon: Hammer,
+    description: "Serviços gerais de restauração e manutenção"
+  }
 ];
 
 const AVAILABLE_ITEMS = {
   epis: [
-    { id: "helmet", name: "Capacete de Segurança" },
-    { id: "gloves", name: "Luvas de Proteção" },
-    { id: "glasses", name: "Óculos de Segurança" },
-    { id: "mask", name: "Máscara Respiratória" },
-    { id: "boots", name: "Bota de Segurança" },
-    { id: "vest", name: "Colete Refletor" },
+    "Capacete", "Óculos de Proteção", "Máscara PFF2", "Luvas", 
+    "Botas de Segurança", "Cinto de Segurança", "Protetor Auricular"
   ],
   tools: [
-    { id: "pressure-washer", name: "Lava-Jato" },
-    { id: "brush", name: "Pincéis" },
-    { id: "roller", name: "Rolos" },
-    { id: "spatula", name: "Espátulas" },
-    { id: "sander", name: "Lixadeira" },
-    { id: "ladder", name: "Escada" },
+    "Rolo de Pintura", "Pincel", "Espátula", "Lixadeira", 
+    "Escada", "Andaime", "Nível", "Trena", "Mixer"
   ],
   materials: [
-    { id: "acrylic-paint", name: "Tinta Acrílica" },
-    { id: "epoxy-primer", name: "Primer Epóxi" },
-    { id: "filler", name: "Massa Reparadora" },
-    { id: "sealant", name: "Selante Poliuretano" },
-    { id: "mortar", name: "Argamassa Cal" },
-    { id: "resin", name: "Resina de Injeção" },
+    "Tinta Látex", "Tinta Acrílica", "Massa Corrida", "Selador", 
+    "Fundo Preparador", "Verniz", "Textura", "Fita Crepe", "Lona"
   ],
   equipment: [
-    { id: "scaffold", name: "Andaime" },
-    { id: "compressor", name: "Compressor" },
-    { id: "generator", name: "Gerador" },
-    { id: "pump", name: "Bomba" },
-  ],
+    "Compressor", "Pistola de Pintura", "Lava Jato", "Gerador", 
+    "Andaime Tubular", "Plataforma Elevatória"
+  ]
 };
 
+const STEPS = [
+  { id: 1, label: "Tipo de Obra", icon: Building },
+  { id: 2, label: "Itens", icon: Layers },
+  { id: 3, label: "Ambientes", icon: Home },
+  { id: 4, label: "Detalhes", icon: Users },
+  { id: 5, label: "Confirmação", icon: Check }
+];
+
+// ==================== MAIN COMPONENT ====================
 export default function NewProject() {
-  const [, setLocation] = useLocation();
-  const [step, setStep] = useState<"type" | "items" | "rooms" | "details" | "calendar">("type");
-  const [formData, setFormData] = useState<ProjectData>({
+  const [, navigate] = useLocation();
+  const [currentStep, setCurrentStep] = useState(1);
+  
+  // Only enforce authentication if OAuth is configured
+  const isOAuthConfigured = import.meta.env.VITE_OAUTH_PORTAL_URL && import.meta.env.VITE_APP_ID;
+  const { isAuthenticated, loading: authLoading } = useAuth({
+    redirectOnUnauthenticated: isOAuthConfigured,
+  });
+  
+  const [formData, setFormData] = useState<FormData>({
+    type: "",
+    items: { epis: [], tools: [], materials: [], equipment: [] },
+    rooms: [],
     name: "",
     location: "",
-    restorationType: [],
-    selectedItems: [],
-    rooms: [],
-    numberOfEmployees: 1,
-    startDate: new Date().toISOString().split("T")[0],
-    workOnSaturday: false,
-    workOnSunday: false,
+    employees: 1,
+    startDate: new Date().toISOString().split('T')[0],
+    workDays: ["seg", "ter", "qua", "qui", "sex"]
   });
 
   const createWorkMutation = trpc.works.create.useMutation({
     onSuccess: () => {
       toast.success("Obra criada com sucesso!");
-      setLocation("/projects");
+      navigate("/projects");
     },
-    onError: (error) => {
-      toast.error(`Erro ao criar obra: ${error.message}`);
-    },
+    onError: (error: any) => {
+      toast.error("Erro ao criar obra: " + error.message);
+    }
   });
 
-  const [currentRoom, setCurrentRoom] = useState<Room>({
-    id: Date.now().toString(),
-    name: "",
-    type: "Sala",
-    area: 0,
-    hasFloor: false,
-    floorType: "",
-    hasPainting: true,
-    hasPlumbing: false,
-    hasElectrical: false,
-    notes: "",
-  });
-
-  const currentStepIndex = stepConfig.findIndex(s => s.id === step);
-
-  // Passo 1: Selecionar Tipo de Restauro
-  if (step === "type") {
+  // Show loading state while checking authentication (only if OAuth is configured)
+  if (isOAuthConfigured && authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 py-8 px-4">
-        <div className="container max-w-5xl mx-auto">
-          {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8 overflow-x-auto pb-4">
-            {stepConfig.map((stepItem, index) => {
-              const StepIcon = stepItem.icon;
-              const isActive = index === currentStepIndex;
-              const isCompleted = index < currentStepIndex;
-              
-              return (
-                <React.Fragment key={stepItem.id}>
-                  <div className="flex flex-col items-center gap-2 min-w-[60px]">
-                    <div className={`
-                      w-12 h-12 rounded-full flex items-center justify-center transition-all
-                      ${isActive ? 'bg-primary text-primary-foreground ring-4 ring-primary/30 scale-110' : 
-                        isCompleted ? 'bg-green-500 text-white' : 
-                        'bg-slate-800 text-slate-400'}
-                    `}>
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-5 h-5" />
-                      ) : (
-                        <StepIcon className="w-5 h-5" />
-                      )}
-                    </div>
-                    <span className={`text-xs font-medium hidden sm:block ${
-                      isActive ? 'text-primary' : isCompleted ? 'text-green-400' : 'text-slate-500'
-                    }`}>
-                      {stepItem.label}
-                    </span>
-                  </div>
-                  {index < stepConfig.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 transition-colors ${
-                      isCompleted ? 'bg-green-500' : 'bg-slate-800'
-                    }`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key="type"
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.3 }}
-            >
-              <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold mb-3">Qual é o tipo de restauro?</h1>
-                <p className="text-slate-400 text-sm md:text-base">Selecione um ou mais tipos de trabalho</p>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
-                {RESTORATION_TYPES.map((type) => {
-                  const Icon = type.icon;
-                  const isSelected = formData.restorationType.includes(type.id);
-                  
-                  return (
-                    <motion.div
-                      key={type.id}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        const isSelected = formData.restorationType.includes(type.id);
-                        setFormData({
-                          ...formData,
-                          restorationType: isSelected
-                            ? formData.restorationType.filter((t) => t !== type.id)
-                            : [...formData.restorationType, type.id],
-                        });
-                      }}
-                      className={`
-                        modern-card cursor-pointer text-center p-4 md:p-6
-                        ${isSelected ? `border-${type.color}-500 bg-${type.color}-500/10` : ''}
-                      `}
-                    >
-                      <Icon className={`w-8 h-8 md:w-10 md:h-10 mx-auto mb-3 ${
-                        isSelected ? `text-${type.color}-400` : 'text-slate-400'
-                      }`} />
-                      <p className="font-semibold text-white text-sm md:text-base mb-2">{type.name}</p>
-                      {isSelected && (
-                        <CheckCircle2 className="w-5 h-5 text-green-400 mx-auto" />
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => window.history.back()}
-                  className="flex-1"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    if (formData.restorationType.length === 0) {
-                      toast.error("Selecione pelo menos um tipo de restauro");
-                      return;
-                    }
-                    setStep("items");
-                  }}
-                  className="flex-1"
-                >
-                  Próximo
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </motion.div>
-          </AnimatePresence>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">Verificando autenticação...</p>
         </div>
       </div>
     );
   }
 
-  // Passo 2: Selecionar Itens
-  if (step === "items") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 py-8 px-4">
-        <div className="container max-w-5xl mx-auto">
-          {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8 overflow-x-auto pb-4">
-            {stepConfig.map((stepItem, index) => {
-              const StepIcon = stepItem.icon;
-              const isActive = index === currentStepIndex;
-              const isCompleted = index < currentStepIndex;
-              
-              return (
-                <React.Fragment key={stepItem.id}>
-                  <div className="flex flex-col items-center gap-2 min-w-[60px]">
-                    <div className={`
-                      w-12 h-12 rounded-full flex items-center justify-center transition-all
-                      ${isActive ? 'bg-primary text-primary-foreground ring-4 ring-primary/30 scale-110' : 
-                        isCompleted ? 'bg-green-500 text-white' : 
-                        'bg-slate-800 text-slate-400'}
-                    `}>
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-5 h-5" />
-                      ) : (
-                        <StepIcon className="w-5 h-5" />
-                      )}
-                    </div>
-                    <span className={`text-xs font-medium hidden sm:block ${
-                      isActive ? 'text-primary' : isCompleted ? 'text-green-400' : 'text-slate-500'
-                    }`}>
-                      {stepItem.label}
-                    </span>
-                  </div>
-                  {index < stepConfig.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 transition-colors ${
-                      isCompleted ? 'bg-green-500' : 'bg-slate-800'
-                    }`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key="items"
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.3 }}
-            >
-              <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold mb-3">Selecione os itens necessários</h1>
-                <p className="text-slate-400 text-sm md:text-base">
-                  {formData.selectedItems.length} itens selecionados
-                </p>
-              </div>
-
-              <div className="space-y-6 mb-8">
-                {Object.entries(AVAILABLE_ITEMS).map(([category, items]) => (
-                  <div key={category} className="modern-card">
-                    <h3 className="text-sm md:text-base font-semibold text-slate-300 uppercase tracking-wider mb-4">
-                      {category === "epis" && "EPIs"}
-                      {category === "tools" && "Ferramentas"}
-                      {category === "materials" && "Materiais"}
-                      {category === "equipment" && "Equipamentos"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {items.map((item: any) => {
-                        const isSelected = formData.selectedItems.includes(item.id);
-                        return (
-                          <label
-                            key={item.id}
-                            className={`
-                              flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all
-                              ${isSelected ? 'bg-primary/20 border-2 border-primary' : 'bg-slate-800/40 border-2 border-transparent hover:bg-slate-800/60'}
-                            `}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormData({
-                                    ...formData,
-                                    selectedItems: [...formData.selectedItems, item.id],
-                                  });
-                                } else {
-                                  setFormData({
-                                    ...formData,
-                                    selectedItems: formData.selectedItems.filter((i) => i !== item.id),
-                                  });
-                                }
-                              }}
-                              className="w-5 h-5 rounded accent-primary"
-                            />
-                            <span className="text-sm text-slate-200 flex-1">{item.name}</span>
-                            {isSelected && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => setStep("type")}
-                  className="flex-1"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
-                <Button
-                  size="lg"
-                  onClick={() => setStep("rooms")}
-                  className="flex-1"
-                >
-                  Próximo
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
-    );
+  // If OAuth is configured but user is not authenticated, the useAuth hook will redirect automatically
+  if (isOAuthConfigured && !isAuthenticated) {
+    return null;
   }
 
-  // Passo 3: Descrever Cômodos
-  if (step === "rooms") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 py-8 px-4">
-        <div className="container max-w-5xl mx-auto">
-          {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8 overflow-x-auto pb-4">
-            {stepConfig.map((stepItem, index) => {
-              const StepIcon = stepItem.icon;
-              const isActive = index === currentStepIndex;
-              const isCompleted = index < currentStepIndex;
-              
-              return (
-                <React.Fragment key={stepItem.id}>
-                  <div className="flex flex-col items-center gap-2 min-w-[60px]">
-                    <div className={`
-                      w-12 h-12 rounded-full flex items-center justify-center transition-all
-                      ${isActive ? 'bg-primary text-primary-foreground ring-4 ring-primary/30 scale-110' : 
-                        isCompleted ? 'bg-green-500 text-white' : 
-                        'bg-slate-800 text-slate-400'}
-                    `}>
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-5 h-5" />
-                      ) : (
-                        <StepIcon className="w-5 h-5" />
-                      )}
-                    </div>
-                    <span className={`text-xs font-medium hidden sm:block ${
-                      isActive ? 'text-primary' : isCompleted ? 'text-green-400' : 'text-slate-500'
-                    }`}>
-                      {stepItem.label}
-                    </span>
-                  </div>
-                  {index < stepConfig.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 transition-colors ${
-                      isCompleted ? 'bg-green-500' : 'bg-slate-800'
-                    }`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
+  // Show warning if OAuth is not configured (development mode)
+  const showDevWarning = !isOAuthConfigured && currentStep === 1;
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key="rooms"
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.3 }}
-            >
-              <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold mb-3">Descreva os cômodos</h1>
-                <p className="text-slate-400 text-sm md:text-base">
-                  {formData.rooms.length} cômodo{formData.rooms.length !== 1 ? 's' : ''} adicionado{formData.rooms.length !== 1 ? 's' : ''}
-                </p>
-              </div>
+  // ==================== CALCULATIONS ====================
+  const totalArea = formData.rooms.reduce((sum, room) => sum + room.area, 0);
+  const productivityPerDay = 20; // m² por funcionário por dia (base)
+  const estimatedDays = Math.ceil(totalArea / (formData.employees * productivityPerDay));
+  
+  const calculateEndDate = () => {
+    if (!formData.startDate || estimatedDays === 0) return "";
+    const start = new Date(formData.startDate);
+    let businessDaysToAdd = estimatedDays;
+    let currentDate = new Date(start);
+    
+    while (businessDaysToAdd > 0) {
+      currentDate.setDate(currentDate.getDate() + 1);
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // não é fim de semana
+        businessDaysToAdd--;
+      }
+    }
+    return currentDate.toISOString().split('T')[0];
+  };
 
-              {/* Lista de Cômodos Adicionados */}
-              {formData.rooms.length > 0 && (
-                <div className="mb-8">
-                  <h3 className="text-lg font-semibold text-white mb-4">Cômodos Adicionados</h3>
-                  <div className="grid gap-3">
-                    {formData.rooms.map((room) => (
-                      <motion.div
-                        key={room.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className="modern-card bg-blue-500/10 border-blue-500/30"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-white mb-1 truncate">
-                              {room.name} <span className="text-slate-400">({room.type})</span>
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                              <span className="tag tag-blue">{room.area} m²</span>
-                              {room.hasFloor && (
-                                <span className="tag tag-green">Piso: {room.floorType}</span>
-                              )}
-                              {room.hasPainting && (
-                                <span className="tag tag-purple">Pintura</span>
-                              )}
-                              {room.hasPlumbing && (
-                                <span className="tag tag-blue">Hidráulica</span>
-                              )}
-                              {room.hasElectrical && (
-                                <span className="tag tag-orange">Elétrica</span>
-                              )}
-                            </div>
-                            {room.notes && (
-                              <p className="text-xs text-slate-400 mt-2">Obs: {room.notes}</p>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setFormData({
-                                ...formData,
-                                rooms: formData.rooms.filter((r) => r.id !== room.id),
-                              });
-                              toast.success("Cômodo removido");
-                            }}
-                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 flex-shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
+  // ==================== HANDLERS ====================
+  const handleNext = () => {
+    if (currentStep === 1 && !formData.type) {
+      toast.error("Selecione o tipo de obra");
+      return;
+    }
+    if (currentStep === 3 && formData.rooms.length === 0) {
+      toast.error("Adicione pelo menos um ambiente");
+      return;
+    }
+    if (currentStep === 4) {
+      if (!formData.name || !formData.location) {
+        toast.error("Preencha todos os campos obrigatórios");
+        return;
+      }
+    }
+    if (currentStep < 5) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
 
-              {/* Formulário para Adicionar Cômodo */}
-              <div className="modern-card mb-8">
-                <h3 className="text-lg font-semibold text-white mb-6">Adicionar Novo Cômodo</h3>
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <Label className="text-white mb-2 block">Nome do Cômodo *</Label>
-                    <Input
-                      type="text"
-                      value={currentRoom.name}
-                      onChange={(e) => setCurrentRoom({ ...currentRoom, name: e.target.value })}
-                      placeholder="Ex: Sala de Estar"
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-white mb-2 block">Tipo de Cômodo *</Label>
-                    <select 
-                      value={currentRoom.type} 
-                      onChange={(e) => setCurrentRoom({ ...currentRoom, type: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    >
-                      <option>Sala</option>
-                      <option>Quarto</option>
-                      <option>Banheiro</option>
-                      <option>Cozinha</option>
-                      <option>Corredor</option>
-                      <option>Área Externa</option>
-                      <option>Outro</option>
-                    </select>
-                  </div>
-                </div>
+  const handleSubmit = () => {
+    const workCode = `OBRA-${Date.now().toString().slice(-6)}`;
+    const typeLabel = RESTORATION_TYPES.find(t => t.id === formData.type)?.label || formData.type;
+    
+    const description = `${typeLabel} - ${totalArea}m² - ${formData.rooms.length} ambientes`;
+    
+    createWorkMutation.mutate({
+      code: workCode,
+      name: formData.name,
+      description: description,
+      location: formData.location,
+      startDate: formData.startDate,
+      estimatedEndDate: calculateEndDate()
+    });
+  };
 
-                <div className="mb-6">
-                  <Label className="text-white mb-2 block">Área (m²) *</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={currentRoom.area || ""}
-                    onChange={(e) => setCurrentRoom({ ...currentRoom, area: parseFloat(e.target.value) || 0 })}
-                    placeholder="Ex: 20"
-                    className="w-full"
-                  />
-                </div>
+  const addRoom = useCallback(() => {
+    const newRoom: Room = {
+      id: Date.now().toString(),
+      name: "",
+      area: 0,
+      floorType: "",
+      characteristics: []
+    };
+    setFormData(prev => ({ ...prev, rooms: [...prev.rooms, newRoom] }));
+  }, []);
 
-                <div className="mb-6">
-                  <Label className="text-white mb-3 block">Características</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={currentRoom.hasPainting}
-                        onChange={(e) => setCurrentRoom({ ...currentRoom, hasPainting: e.target.checked })}
-                        className="w-5 h-5 rounded accent-primary"
-                      />
-                      <span className="text-sm text-white">Tem pintura</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={currentRoom.hasFloor}
-                        onChange={(e) => setCurrentRoom({ ...currentRoom, hasFloor: e.target.checked })}
-                        className="w-5 h-5 rounded accent-primary"
-                      />
-                      <span className="text-sm text-white">Tem piso</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={currentRoom.hasPlumbing}
-                        onChange={(e) => setCurrentRoom({ ...currentRoom, hasPlumbing: e.target.checked })}
-                        className="w-5 h-5 rounded accent-primary"
-                      />
-                      <span className="text-sm text-white">Tem hidráulica</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={currentRoom.hasElectrical}
-                        onChange={(e) => setCurrentRoom({ ...currentRoom, hasElectrical: e.target.checked })}
-                        className="w-5 h-5 rounded accent-primary"
-                      />
-                      <span className="text-sm text-white">Tem elétrica</span>
-                    </label>
-                  </div>
-                </div>
+  const updateRoom = useCallback((id: string, field: keyof Room, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.map(room => 
+        room.id === id ? { ...room, [field]: value } : room
+      )
+    }));
+  }, []);
 
-                {currentRoom.hasFloor && (
-                  <div className="mb-6">
-                    <Label className="text-white mb-2 block">Tipo de Piso</Label>
-                    <Input
-                      type="text"
-                      value={currentRoom.floorType}
-                      onChange={(e) => setCurrentRoom({ ...currentRoom, floorType: e.target.value })}
-                      placeholder="Ex: Cerâmica, Madeira, Porcelanato"
-                      className="w-full"
-                    />
-                  </div>
-                )}
+  const removeRoom = useCallback((id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.filter(room => room.id !== id)
+    }));
+  }, []);
 
-                <div className="mb-6">
-                  <Label className="text-white mb-2 block">Observações</Label>
-                  <textarea
-                    value={currentRoom.notes}
-                    onChange={(e) => setCurrentRoom({ ...currentRoom, notes: e.target.value })}
-                    placeholder="Ex: Parede com mofo, trincas, etc"
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[100px] resize-y"
-                  />
-                </div>
+  const toggleItem = (category: keyof FormData['items'], item: string) => {
+    const currentItems = formData.items[category];
+    const newItems = currentItems.includes(item)
+      ? currentItems.filter(i => i !== item)
+      : [...currentItems, item];
+    
+    setFormData({
+      ...formData,
+      items: { ...formData.items, [category]: newItems }
+    });
+  };
 
-                <Button
-                  onClick={() => {
-                    if (!currentRoom.name || currentRoom.area === 0) {
-                      toast.error("Preencha nome e área do cômodo");
-                      return;
-                    }
-                    if (currentRoom.hasFloor && !currentRoom.floorType) {
-                      toast.error("Especifique o tipo de piso");
-                      return;
-                    }
-                    setFormData({
-                      ...formData,
-                      rooms: [...formData.rooms, currentRoom],
-                    });
-                    setCurrentRoom({
-                      id: Date.now().toString(),
-                      name: "",
-                      type: "Sala",
-                      area: 0,
-                      hasFloor: false,
-                      floorType: "",
-                      hasPainting: true,
-                      hasPlumbing: false,
-                      hasElectrical: false,
-                      notes: "",
-                    });
-                    toast.success("Cômodo adicionado!");
-                  }}
-                  className="w-full gap-2"
-                  size="lg"
-                >
-                  <Plus className="w-5 h-5" />
-                  Adicionar Cômodo
-                </Button>
-              </div>
+  // ==================== RENDER STEPS ====================
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return <Step1TypeSelection />;
+      case 2:
+        return <Step2Items />;
+      case 3:
+        return <Step3Rooms 
+          rooms={formData.rooms} 
+          totalArea={totalArea}
+          onAddRoom={addRoom}
+          onUpdateRoom={updateRoom}
+          onRemoveRoom={removeRoom}
+        />;
+      case 4:
+        return <Step4Details 
+          name={formData.name}
+          location={formData.location}
+          employees={formData.employees}
+          startDate={formData.startDate}
+          totalArea={totalArea}
+          estimatedDays={estimatedDays}
+          endDate={calculateEndDate()}
+          onNameChange={(value) => setFormData(prev => ({ ...prev, name: value }))}
+          onLocationChange={(value) => setFormData(prev => ({ ...prev, location: value }))}
+          onEmployeesChange={(value) => setFormData(prev => ({ ...prev, employees: value }))}
+          onStartDateChange={(value) => setFormData(prev => ({ ...prev, startDate: value }))}
+        />;
+      case 5:
+        return <Step5Confirmation />;
+      default:
+        return null;
+    }
+  };
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => setStep("items")}
-                  className="flex-1"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    if (formData.rooms.length === 0) {
-                      toast.error("Adicione pelo menos um cômodo");
-                      return;
-                    }
-                    setStep("details");
-                  }}
-                  className="flex-1"
-                >
-                  Próximo
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+  // ==================== STEP 1: TYPE SELECTION ====================
+  const Step1TypeSelection = () => (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-white mb-2">Selecione o Tipo de Obra</h2>
+        <p className="text-slate-400">Escolha o tipo de serviço que será realizado</p>
       </div>
-    );
-  }
-
-  // Passo 4: Detalhes Finais
-  if (step === "details") {
-    return (
-      <div className="page-wrapper">
-        <div className="container" style={{ maxWidth: "700px" }}>
-          <div className="page-header mb-8">
-            <h1>Detalhes da Obra</h1>
-            <p>Preencha os últimos detalhes para gerar o cronograma</p>
-          </div>
-
-          <div className="card" style={{ padding: "2rem" }}>
-            <div className="form-group">
-              <label>Nome da Obra *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Restauração Apartamento Centro"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Localização *</label>
-              <input
-                type="text"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="Ex: Rua das Flores, 123 - São Paulo"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Número de Funcionários *</label>
-              <input
-                type="number"
-                min="1"
-                value={formData.numberOfEmployees}
-                onChange={(e) => setFormData({ ...formData, numberOfEmployees: parseInt(e.target.value) || 1 })}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Data de Início *</label>
-              <input
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                required
-              />
-            </div>
-
-            <div style={{ marginBottom: "2rem" }}>
-              <p style={{ marginBottom: "1rem", fontWeight: "600", color: "#fff" }}>Dias de Trabalho</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.workOnSaturday}
-                    onChange={(e) => setFormData({ ...formData, workOnSaturday: e.target.checked })}
-                    style={{ width: "18px", height: "18px", cursor: "pointer" }}
-                  />
-                  <span>Trabalhar aos sábados</span>
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.workOnSunday}
-                    onChange={(e) => setFormData({ ...formData, workOnSunday: e.target.checked })}
-                    style={{ width: "18px", height: "18px", cursor: "pointer" }}
-                  />
-                  <span>Trabalhar aos domingos</span>
-                </label>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "1rem" }}>
-              <button onClick={() => setStep("rooms")} className="btn btn-secondary" style={{ flex: 1 }}>
-                Voltar
-              </button>
-              <button
-                onClick={() => {
-                  if (!formData.name || !formData.location) {
-                    toast.error("Preencha todos os campos");
-                    return;
-                  }
-                  setStep("calendar");
-                  toast.success("Cronograma gerado!");
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {RESTORATION_TYPES.map((type) => {
+          const Icon = type.icon;
+          const isSelected = formData.type === type.id;
+          
+          return (
+            <motion.button
+              key={type.id}
+              whileHover={{ scale: 1.02, y: -4 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setFormData({ ...formData, type: type.id })}
+              className={`modern-card text-left p-6 transition-all ${
+                isSelected 
+                  ? 'border-slate-700/50 hover:border-slate-600' 
+                  : 'border-slate-700/50 hover:border-slate-600'
+              }`}
+              style={isSelected ? {
+                borderColor: 'oklch(0.84 0.19 80.45)',
+                backgroundColor: 'oklch(0.84 0.19 80.45 / 0.05)'
+              } : {}}
+            >
+              <div 
+                className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
+                style={isSelected ? {
+                  backgroundColor: 'oklch(0.84 0.19 80.45 / 0.2)'
+                } : {
+                  backgroundColor: 'rgb(51 65 85 / 0.5)'
                 }}
-                className="btn btn-primary"
-                style={{ flex: 1 }}
               >
-                Gerar Cronograma
+                <Icon 
+                  className="w-7 h-7"
+                  style={isSelected ? {
+                    color: 'oklch(0.84 0.19 80.45)'
+                  } : {
+                    color: 'rgb(148 163 184)'
+                  }}
+                />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">{type.label}</h3>
+              <p className="text-sm text-slate-400">{type.description}</p>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ==================== STEP 2: ITEMS ====================
+  const Step2Items = () => {
+    const ItemCategory = ({ title, category, items }: { 
+      title: string; 
+      category: keyof FormData['items']; 
+      items: string[] 
+    }) => (
+      <div className="modern-card p-6">
+        <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
+        <div className="flex flex-wrap gap-2">
+          {items.map(item => {
+            const isSelected = formData.items[category].includes(item);
+            
+            return (
+              <button
+                key={item}
+                onClick={() => toggleItem(category, item)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  isSelected
+                    ? 'bg-primary text-white'
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {item}
               </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
     );
-  }
-
-  // Passo 5: Calendário
-  if (step === "calendar") {
-    const totalArea = formData.rooms.reduce((sum, room) => sum + room.area, 0);
-    const estimatedDays = Math.ceil((totalArea / 25) / formData.numberOfEmployees);
 
     return (
-      <div className="page-wrapper">
-        <div className="container">
-          <div className="page-header mb-8">
-            <h1>{formData.name}</h1>
-            <p>{formData.location}</p>
+      <div className="space-y-6">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-white mb-2">Selecione os Itens Necessários</h2>
+          <p className="text-slate-400">Escolha os EPIs, ferramentas, materiais e equipamentos</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ItemCategory title="EPIs" category="epis" items={AVAILABLE_ITEMS.epis} />
+          <ItemCategory title="Ferramentas" category="tools" items={AVAILABLE_ITEMS.tools} />
+          <ItemCategory title="Materiais" category="materials" items={AVAILABLE_ITEMS.materials} />
+          <ItemCategory title="Equipamentos" category="equipment" items={AVAILABLE_ITEMS.equipment} />
+        </div>
+      </div>
+    );
+  };
+
+  // ==================== STEP 5: CONFIRMATION ====================
+  const Step5Confirmation = () => {
+    const selectedType = RESTORATION_TYPES.find(t => t.id === formData.type);
+    
+    return (
+      <div className="space-y-6">
+        <div className="text-center mb-8">
+          <Check className="w-16 h-16 text-green-500 mx-auto mb-4" />
+          <h2 className="text-3xl font-bold text-white mb-2">Confirmar Criação da Obra</h2>
+          <p className="text-slate-400">Revise as informações antes de finalizar</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Informações Gerais */}
+          <div className="modern-card p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Building className="w-5 h-5 text-primary" />
+              Informações Gerais
+            </h3>
+            <div className="space-y-3">
+              <div className="info-item">
+                <span className="info-label">Nome:</span>
+                <span className="info-value">{formData.name}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Tipo:</span>
+                <span className="info-value">{selectedType?.label}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Localização:</span>
+                <span className="info-value">{formData.location}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Funcionários:</span>
+                <span className="info-value">{formData.employees}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Início:</span>
+                <span className="info-value">
+                  {new Date(formData.startDate).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Resumo */}
-          <div className="grid grid-cols-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-            <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
-              <p style={{ color: "#94a3b8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Área Total</p>
-              <p style={{ fontSize: "1.75rem", fontWeight: "700", color: "#3b82f6" }}>{totalArea.toFixed(0)} m²</p>
-            </div>
-            <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
-              <p style={{ color: "#94a3b8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Cômodos</p>
-              <p style={{ fontSize: "1.75rem", fontWeight: "700", color: "#8b5cf6" }}>{formData.rooms.length}</p>
-            </div>
-            <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
-              <p style={{ color: "#94a3b8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Funcionários</p>
-              <p style={{ fontSize: "1.75rem", fontWeight: "700", color: "#ec4899" }}>{formData.numberOfEmployees}</p>
-            </div>
-            <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
-              <p style={{ color: "#94a3b8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Dias Estimados</p>
-              <p style={{ fontSize: "1.75rem", fontWeight: "700", color: "#10b981" }}>{estimatedDays}</p>
-            </div>
-          </div>
-
-          {/* Cômodos */}
-          <div className="card" style={{ padding: "2rem", marginBottom: "2rem" }}>
-            <h2 style={{ marginBottom: "1.5rem" }}>Cômodos da Obra</h2>
-            <div style={{ display: "grid", gap: "1rem" }}>
-              {formData.rooms.map((room) => (
-                <div
-                  key={room.id}
-                  style={{
-                    padding: "1rem",
-                    borderRadius: "8px",
-                    background: "rgba(59, 130, 246, 0.08)",
-                    border: "1px solid rgba(59, 130, 246, 0.2)",
-                  }}
-                >
-                  <p style={{ fontWeight: "600", color: "#fff", marginBottom: "0.5rem" }}>
-                    {room.name} ({room.type})
-                  </p>
-                  <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-                    Área: {room.area} m²
-                  </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {room.hasPainting && <span className="badge badge-info">Pintura</span>}
-                    {room.hasFloor && <span className="badge badge-info">Piso: {room.floorType}</span>}
-                    {room.hasPlumbing && <span className="badge badge-info">Hidráulica</span>}
-                    {room.hasElectrical && <span className="badge badge-info">Elétrica</span>}
-                  </div>
-                  {room.notes && <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: "0.5rem" }}>Obs: {room.notes}</p>}
+          {/* Ambientes */}
+          <div className="modern-card p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Home className="w-5 h-5 text-primary" />
+              Ambientes ({formData.rooms.length})
+            </h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {formData.rooms.map((room, index) => (
+                <div key={room.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-300">{room.name || `Ambiente ${index + 1}`}</span>
+                  <span className="text-primary font-semibold">{room.area} m²</span>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
+              <span className="text-slate-400 font-medium">Área Total:</span>
+              <span className="text-2xl font-bold text-primary">{totalArea} m²</span>
             </div>
           </div>
 
           {/* Itens Selecionados */}
-          <div className="card" style={{ padding: "2rem", marginBottom: "2rem" }}>
-            <h2 style={{ marginBottom: "1.5rem" }}>Itens Selecionados</h2>
-            <p style={{ color: "#94a3b8", marginBottom: "1rem" }}>Total de {formData.selectedItems.length} itens</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
-              {formData.selectedItems.map((itemId) => {
-                for (const [category, items] of Object.entries(AVAILABLE_ITEMS)) {
-                  const item = items.find((i: any) => i.id === itemId);
-                  if (item) {
-                    return (
-                      <div key={itemId} className="badge badge-success" style={{ padding: "0.75rem", textAlign: "center" }}>
-                        {item.name}
-                      </div>
-                    );
-                  }
-                }
-                return null;
-              })}
+          <div className="modern-card p-6 lg:col-span-2">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-primary" />
+              Itens Selecionados
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-slate-400 mb-2">EPIs ({formData.items.epis.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {formData.items.epis.length === 0 ? (
+                    <span className="text-xs text-slate-600">Nenhum</span>
+                  ) : (
+                    formData.items.epis.map(item => (
+                      <span key={item} className="tag tag-blue text-xs">{item}</span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400 mb-2">Ferramentas ({formData.items.tools.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {formData.items.tools.length === 0 ? (
+                    <span className="text-xs text-slate-600">Nenhuma</span>
+                  ) : (
+                    formData.items.tools.map(item => (
+                      <span key={item} className="tag tag-green text-xs">{item}</span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400 mb-2">Materiais ({formData.items.materials.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {formData.items.materials.length === 0 ? (
+                    <span className="text-xs text-slate-600">Nenhum</span>
+                  ) : (
+                    formData.items.materials.map(item => (
+                      <span key={item} className="tag tag-purple text-xs">{item}</span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400 mb-2">Equipamentos ({formData.items.equipment.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {formData.items.equipment.length === 0 ? (
+                    <span className="text-xs text-slate-600">Nenhum</span>
+                  ) : (
+                    formData.items.equipment.map(item => (
+                      <span key={item} className="tag tag-orange text-xs">{item}</span>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Botões */}
-          <div style={{ display: "flex", gap: "1rem" }}>
-            <button onClick={() => setStep("details")} className="btn btn-secondary" style={{ flex: 1 }}>
-              Voltar
-            </button>
-            <button
-              onClick={() => {
-                // Gerar código único para a obra
-                const timestamp = Date.now();
-                const code = `OBRA-${timestamp}`;
-
-                // Calcular data estimada de fim
-                const totalArea = formData.rooms.reduce((sum, room) => sum + room.area, 0);
-                const estimatedDays = Math.ceil((totalArea / 25) / formData.numberOfEmployees);
-                const startDate = new Date(formData.startDate);
-                const estimatedEndDate = new Date(startDate);
-                estimatedEndDate.setDate(startDate.getDate() + estimatedDays);
-
-                // Preparar descrição com detalhes
-                const description = `Tipos de restauro: ${formData.restorationType.join(", ")}. ${formData.rooms.length} cômodo(s), ${totalArea.toFixed(0)} m² total. ${formData.selectedItems.length} itens selecionados.`;
-
-                // Criar obra no banco de dados
-                createWorkMutation.mutate({
-                  code,
-                  name: formData.name,
-                  description,
-                  location: formData.location,
-                  startDate: formData.startDate,
-                  estimatedEndDate: estimatedEndDate.toISOString().split("T")[0],
-                });
-              }}
-              className="btn btn-primary"
-              style={{ flex: 1 }}
-              disabled={createWorkMutation.isPending}
-            >
-              {createWorkMutation.isPending ? "Salvando..." : "Confirmar e Começar"}
-            </button>
+          {/* Estimativas */}
+          <div className="modern-card p-6 lg:col-span-2 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Cronograma Estimado
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <p className="text-sm text-slate-400 mb-1">Duração Estimada</p>
+                <p className="text-3xl font-bold text-white">{estimatedDays}</p>
+                <p className="text-xs text-slate-500">dias úteis</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-slate-400 mb-1">Produtividade</p>
+                <p className="text-3xl font-bold text-white">{productivityPerDay}</p>
+                <p className="text-xs text-slate-500">m²/funcionário/dia</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-slate-400 mb-1">Previsão Término</p>
+                <p className="text-lg font-bold text-primary">
+                  {calculateEndDate() ? new Date(calculateEndDate()).toLocaleDateString('pt-BR') : '-'}
+                </p>
+                <p className="text-xs text-slate-500">data estimada</p>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-slate-800/50 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-slate-300">
+                O cronograma será ajustado automaticamente conforme o progresso real da obra. 
+                Você poderá marcar as tarefas concluídas diariamente e o sistema recalculará as datas.
+              </p>
+            </div>
           </div>
         </div>
       </div>
     );
-  }
+  };
 
-  return null;
+  // ==================== MAIN RENDER ====================
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+      <div className="container mx-auto px-4 py-8 lg:py-12 max-w-6xl">
+        {/* Progress Steps */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            {STEPS.map((step, index) => {
+              const StepIcon = step.icon;
+              const isActive = currentStep === step.id;
+              const isCompleted = currentStep > step.id;
+              
+              return (
+                <React.Fragment key={step.id}>
+                  <div className="flex flex-col items-center gap-2">
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${
+                        isActive
+                          ? 'bg-primary border-primary text-white'
+                          : isCompleted
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'bg-slate-800 border-slate-700 text-slate-500'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <Check className="w-6 h-6" />
+                      ) : (
+                        <StepIcon className="w-6 h-6" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs font-medium text-center hidden sm:block ${
+                        isActive || isCompleted ? 'text-white' : 'text-slate-500'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  
+                  {index < STEPS.length - 1 && (
+                    <div
+                      className={`flex-1 h-0.5 mx-2 transition-all ${
+                        isCompleted ? 'bg-green-500' : 'bg-slate-700'
+                      }`}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Step Content */}
+        {showDevWarning && (
+          <div className="mb-6 modern-card p-4 bg-yellow-500/10 border-yellow-500/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-semibold text-yellow-400 mb-1">Modo Desenvolvimento</h4>
+                <p className="text-xs text-yellow-200/80">
+                  OAuth não configurado. Configure VITE_OAUTH_PORTAL_URL e VITE_APP_ID para habilitar autenticação.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div>
+          {renderStep()}
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="flex items-center justify-between mt-8 gap-4">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleBack}
+            disabled={currentStep === 1}
+            className="gap-2"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            Voltar
+          </Button>
+
+          <div className="flex gap-4">
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={() => navigate("/projects")}
+            >
+              Cancelar
+            </Button>
+            
+            {currentStep < 5 ? (
+              <Button
+                size="lg"
+                onClick={handleNext}
+                className="gap-2"
+              >
+                Próximo
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleSubmit}
+                disabled={createWorkMutation.isPending}
+                className="gap-2 bg-green-600 hover:bg-green-700"
+              >
+                {createWorkMutation.isPending ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    Criar Obra
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

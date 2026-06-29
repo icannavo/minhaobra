@@ -71,6 +71,12 @@ const Navigation = () => {
       description: "Gestão de obras"
     },
     { 
+      href: "/task-templates", 
+      label: "Templates", 
+      icon: Wrench,
+      description: "Templates de tarefas"
+    },
+    { 
       href: "/catalog", 
       label: "Catálogo", 
       icon: BookOpen,

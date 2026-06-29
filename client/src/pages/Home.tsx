@@ -175,7 +175,7 @@ export default function Home() {
           {mainActions.map((action, index) => (
             <motion.div key={action.href} variants={itemVariants}>
               <Link href={action.href}>
-                <motion.a
+                <motion.div
                   className="block h-full"
                   variants={cardHoverVariants}
                   initial="rest"
@@ -207,7 +207,7 @@ export default function Home() {
                       </div>
                     </CardContent>
                   </Card>
-                </motion.a>
+                </motion.div>
               </Link>
             </motion.div>
           ))}

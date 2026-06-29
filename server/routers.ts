@@ -10,7 +10,10 @@ import * as db from "./db";
  */
 const worksRouter = router({
   getAll: publicProcedure.query(() => db.getAllWorks()),
-  create: protectedProcedure
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getWorkById(input.id)),
+  create: publicProcedure
     .input(
       z.object({
         code: z.string(),
@@ -222,6 +225,233 @@ const alertsRouter = router({
 });
 
 /**
+ * CLASSES E SUBCLASSES DE TAREFAS ROUTER - NOVO SISTEMA DETALHADO
+ */
+const taskClassesRouter = router({
+  getAll: publicProcedure.query(() => db.getAllTaskClasses()),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getTaskClassById(input.id)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        name: z.string(),
+        code: z.string(),
+        category: z.string(),
+        description: z.string().optional(),
+        requiresScaffolding: z.boolean().optional(),
+        requiresSafetyMeeting: z.boolean().optional(),
+        safetyMeetingMinutes: z.number().optional(),
+        baseProductivity: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createTaskClass(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        requiresScaffolding: z.boolean().optional(),
+        requiresSafetyMeeting: z.boolean().optional(),
+        safetyMeetingMinutes: z.number().optional(),
+        baseProductivity: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTaskClass(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteTaskClass(input.id)),
+});
+
+const taskSubclassesRouter = router({
+  getByClass: publicProcedure
+    .input(z.object({ classId: z.number() }))
+    .query(({ input }) => db.getSubclassesByClass(input.classId)),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getTaskSubclassById(input.id)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        classId: z.number(),
+        name: z.string(),
+        code: z.string(),
+        description: z.string().optional(),
+        productivityMultiplier: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createTaskSubclass(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        productivityMultiplier: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTaskSubclass(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteTaskSubclass(input.id)),
+});
+
+const taskStepsRouter = router({
+  getBySubclass: publicProcedure
+    .input(z.object({ subclassId: z.number() }))
+    .query(({ input }) => db.getStepsBySubclass(input.subclassId)),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getTaskStepById(input.id)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        subclassId: z.number(),
+        name: z.string(),
+        stepOrder: z.number(),
+        stepType: z.enum([
+          "SAFETY_MEETING",
+          "PREPARATION",
+          "EQUIPMENT_SETUP",
+          "SCAFFOLDING",
+          "EPIs",
+          "EXECUTION",
+          "BREAK",
+          "CLEANUP",
+          "INSPECTION",
+          "EQUIPMENT_TEARDOWN",
+        ]),
+        baseTimeMinutes: z.number().optional(),
+        timeCalculationType: z.enum(["FIXED", "PER_M2", "PER_FLOOR", "PER_EQUIPMENT", "PERCENTAGE_EXECUTION"]).optional(),
+        timeCalculationValue: z.number().optional(),
+        requiresCooldown: z.boolean().optional(),
+        cooldownMinutes: z.number().optional(),
+        maxContinuousMinutes: z.number().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createTaskStep(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        stepOrder: z.number().optional(),
+        baseTimeMinutes: z.number().optional(),
+        timeCalculationType: z.enum(["FIXED", "PER_M2", "PER_FLOOR", "PER_EQUIPMENT", "PERCENTAGE_EXECUTION"]).optional(),
+        timeCalculationValue: z.number().optional(),
+        requiresCooldown: z.boolean().optional(),
+        cooldownMinutes: z.number().optional(),
+        maxContinuousMinutes: z.number().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTaskStep(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteTaskStep(input.id)),
+});
+
+const detailedTasksRouter = router({
+  getByWork: publicProcedure
+    .input(
+      z.object({
+        workId: z.number(),
+        date: z.string().optional(),
+      })
+    )
+    .query(({ input }) => db.getDetailedTasksByWork(input.workId, input.date)),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getDetailedTaskById(input.id)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        workId: z.number(),
+        date: z.string(),
+        classId: z.number(),
+        subclassId: z.number(),
+        taskName: z.string(),
+        description: z.string().optional(),
+        area: z.number().optional(),
+        height: z.number().optional(),
+        width: z.number().optional(),
+        floors: z.number().optional(),
+        team: z.string().optional(),
+        numberOfEmployees: z.number().optional(),
+        weather: z.string().optional(),
+        temperature: z.number().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createDetailedTask(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        status: z.enum(["Planejado", "Em Preparação", "Em Execução", "Pausada", "Concluído", "Adiado"]).optional(),
+        currentStepId: z.number().optional(),
+        completedSteps: z.string().optional(),
+        actualTotalMinutes: z.number().optional(),
+        notes: z.string().optional(),
+        issues: z.string().optional(),
+        correctionAction: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateDetailedTask(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteDetailedTask(input.id)),
+  calculateRequirements: publicProcedure
+    .input(
+      z.object({
+        subclassId: z.number(),
+        area: z.number(),
+        floors: z.number().optional(),
+      })
+    )
+    .query(({ input }) => db.calculateTaskRequirements(input.subclassId, input.area, input.floors || 1)),
+});
+
+const stepExecutionsRouter = router({
+  getByTask: publicProcedure
+    .input(z.object({ detailedTaskId: z.number() }))
+    .query(({ input }) => db.getExecutionsByTask(input.detailedTaskId)),
+  start: protectedProcedure
+    .input(
+      z.object({
+        detailedTaskId: z.number(),
+        stepId: z.number(),
+      })
+    )
+    .mutation(({ input }) => db.startStepExecution(input.detailedTaskId, input.stepId)),
+  complete: protectedProcedure
+    .input(
+      z.object({
+        executionId: z.number(),
+        notes: z.string().optional(),
+        issues: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.completeStepExecution(input.executionId, input.notes, input.issues)),
+});
+
+/**
  * MAIN APP ROUTER
  */
 export const appRouter = router({
@@ -245,6 +475,13 @@ export const appRouter = router({
   schedule: scheduleRouter,
   productivity: productivityRouter,
   alerts: alertsRouter,
+
+  // NOVO: Sistema detalhado de classes e tarefas
+  taskClasses: taskClassesRouter,
+  taskSubclasses: taskSubclassesRouter,
+  taskSteps: taskStepsRouter,
+  detailedTasks: detailedTasksRouter,
+  stepExecutions: stepExecutionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

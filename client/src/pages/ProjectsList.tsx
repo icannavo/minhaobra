@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import { Calendar, Users, ArrowRight, Plus, MapPin, ChevronRight, TrendingUp, Clock, Briefcase } from "lucide-react";
+import { Calendar, MapPin, ChevronRight, Briefcase, Plus } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
 
 interface Project {
   id: string;
@@ -44,47 +45,42 @@ const itemVariants = {
 
 export default function ProjectsList() {
   const [, navigate] = useLocation();
-  const [projects] = useState<Project[]>([
-    {
-      id: "1",
-      name: "Fachada Prédio Centro",
-      type: "Pintura Externa",
-      location: "Centro, São Paulo",
-      area: 160,
-      employees: 3,
-      startDate: "2026-06-29",
-      estimatedDays: 8,
-      completedDays: 2,
-      progress: 25,
-      status: "in-progress",
-    },
-    {
-      id: "2",
-      name: "Pintura Apartamento",
-      type: "Pintura Interna",
-      location: "Vila Mariana, São Paulo",
-      area: 120,
-      employees: 2,
-      startDate: "2026-07-01",
-      estimatedDays: 5,
-      completedDays: 0,
-      progress: 0,
-      status: "planning",
-    },
-    {
-      id: "3",
-      name: "Restauração Fachada Histórica",
-      type: "Restauração Fachada",
-      location: "Pátio do Colégio, São Paulo",
-      area: 250,
-      employees: 5,
-      startDate: "2026-05-15",
-      estimatedDays: 15,
-      completedDays: 15,
-      progress: 100,
-      status: "completed",
-    },
-  ]);
+  
+  // Buscar obras REAIS do banco de dados
+  const { data: worksData, isLoading } = trpc.works.getAll.useQuery();
+  
+  // Mapear dados do banco para o formato da interface
+  const projects: Project[] = (worksData || []).map((work) => {
+    // Calcular status baseado no status da obra
+    let status: "planning" | "in-progress" | "completed" = "planning";
+    if (work.status === "Em Andamento") status = "in-progress";
+    else if (work.status === "Concluído") status = "completed";
+    
+    // Calcular progresso estimado (exemplo simples - pode ser refinado)
+    const estimatedDays = work.estimatedEndDate && work.startDate
+      ? Math.ceil((new Date(work.estimatedEndDate).getTime() - new Date(work.startDate).getTime()) / (1000 * 60 * 60 * 24))
+      : 10;
+    
+    const completedDays = work.startDate
+      ? Math.max(0, Math.ceil((new Date().getTime() - new Date(work.startDate).getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+    
+    const progress = estimatedDays > 0 ? Math.min(100, Math.round((completedDays / estimatedDays) * 100)) : 0;
+    
+    return {
+      id: work.id.toString(),
+      name: work.name,
+      type: work.description?.split(' - ')[0] || "Obra",
+      location: work.location || "Não informado",
+      area: parseInt(work.description?.match(/(\d+)m²/)?.[1] || "0"),
+      employees: 1, // Pode ser adicionado ao schema futuramente
+      startDate: work.startDate || new Date().toISOString().split('T')[0],
+      estimatedDays,
+      completedDays,
+      progress: status === "completed" ? 100 : progress,
+      status,
+    };
+  });
 
   const totalProjects = projects.length;
   const activeProjects = projects.filter(p => p.status === "in-progress").length;
@@ -165,7 +161,12 @@ export default function ProjectsList() {
         )}
 
         {/* Projects List */}
-        {projects.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-slate-400">Carregando obras...</p>
+          </div>
+        ) : projects.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}

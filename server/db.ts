@@ -11,6 +11,13 @@ import {
   scheduleItems,
   productivityHistory,
   alerts,
+  taskClasses,
+  taskSubclasses,
+  taskSteps,
+  stepEquipments,
+  stepMaterials,
+  detailedTasks,
+  stepExecutions,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -114,6 +121,13 @@ export async function getAllWorks() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(works).orderBy(desc(works.createdAt));
+}
+
+export async function getWorkById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(works).where(eq(works.id, id)).limit(1);
+  return result[0] || null;
 }
 
 export async function createWork(data: any) {
@@ -413,4 +427,363 @@ export async function calculateNextSchedule(workId: number, currentDate: string)
       estimatedDays: daysNeeded,
     };
   });
+}
+
+
+/**
+ * ========================================
+ * CLASSES E SUBCLASSES DE TAREFAS
+ * ========================================
+ */
+
+/**
+ * TASK CLASSES - Classes de tarefas (templates)
+ */
+export async function getAllTaskClasses() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(taskClasses).orderBy(taskClasses.category, taskClasses.name);
+}
+
+export async function getTaskClassById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(taskClasses).where(eq(taskClasses.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createTaskClass(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(taskClasses).values(data);
+}
+
+export async function updateTaskClass(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(taskClasses).set(data).where(eq(taskClasses.id, id));
+}
+
+export async function deleteTaskClass(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(taskClasses).where(eq(taskClasses.id, id));
+}
+
+/**
+ * TASK SUBCLASSES - Subclasses (variações) de tarefas
+ */
+export async function getSubclassesByClass(classId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(taskSubclasses).where(eq(taskSubclasses.classId, classId));
+}
+
+export async function getTaskSubclassById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(taskSubclasses).where(eq(taskSubclasses.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createTaskSubclass(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(taskSubclasses).values(data);
+}
+
+export async function updateTaskSubclass(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(taskSubclasses).set(data).where(eq(taskSubclasses.id, id));
+}
+
+export async function deleteTaskSubclass(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(taskSubclasses).where(eq(taskSubclasses.id, id));
+}
+
+/**
+ * TASK STEPS - Etapas detalhadas de uma subclasse
+ */
+export async function getStepsBySubclass(subclassId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(taskSteps).where(eq(taskSteps.subclassId, subclassId)).orderBy(taskSteps.stepOrder);
+}
+
+export async function getTaskStepById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(taskSteps).where(eq(taskSteps.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createTaskStep(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(taskSteps).values(data);
+}
+
+export async function updateTaskStep(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(taskSteps).set(data).where(eq(taskSteps.id, id));
+}
+
+export async function deleteTaskStep(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(taskSteps).where(eq(taskSteps.id, id));
+}
+
+/**
+ * STEP EQUIPMENTS - Equipamentos por etapa
+ */
+export async function getEquipmentsByStep(stepId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(stepEquipments).where(eq(stepEquipments.stepId, stepId));
+}
+
+export async function addEquipmentToStep(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(stepEquipments).values(data);
+}
+
+export async function removeEquipmentFromStep(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(stepEquipments).where(eq(stepEquipments.id, id));
+}
+
+/**
+ * STEP MATERIALS - Materiais por etapa
+ */
+export async function getMaterialsByStep(stepId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(stepMaterials).where(eq(stepMaterials.stepId, stepId));
+}
+
+export async function addMaterialToStep(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(stepMaterials).values(data);
+}
+
+export async function removeMaterialFromStep(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(stepMaterials).where(eq(stepMaterials.id, id));
+}
+
+/**
+ * DETAILED TASKS - Tarefas detalhadas com breakdown completo
+ */
+export async function getDetailedTasksByWork(workId: number, date?: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (date) {
+    return db
+      .select()
+      .from(detailedTasks)
+      .where(and(eq(detailedTasks.workId, workId), eq(detailedTasks.date, date as any)))
+      .orderBy(detailedTasks.taskName);
+  }
+
+  return db
+    .select()
+    .from(detailedTasks)
+    .where(eq(detailedTasks.workId, workId))
+    .orderBy(desc(detailedTasks.date));
+}
+
+export async function getDetailedTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(detailedTasks).where(eq(detailedTasks.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createDetailedTask(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Calcular tempo total estimado baseado nas etapas
+  const steps = await getStepsBySubclass(data.subclassId);
+  let totalMinutes = 0;
+  
+  for (const step of steps) {
+    let stepTime = step.baseTimeMinutes || 0;
+    
+    // Calcular tempo baseado no tipo
+    switch (step.timeCalculationType) {
+      case "PER_M2":
+        stepTime = (data.area || 0) * (step.timeCalculationValue || 0);
+        break;
+      case "PER_FLOOR":
+        stepTime = (data.floors || 1) * (step.timeCalculationValue || 0);
+        break;
+      case "PERCENTAGE_EXECUTION":
+        // Será calculado depois que soubermos o tempo de execução
+        break;
+      default:
+        stepTime = step.baseTimeMinutes || 0;
+    }
+    
+    // Adicionar tempo de cooldown se necessário
+    if (step.requiresCooldown && step.maxContinuousMinutes > 0) {
+      const cycles = Math.ceil(stepTime / step.maxContinuousMinutes);
+      totalMinutes += stepTime + (cycles - 1) * (step.cooldownMinutes || 0);
+    } else {
+      totalMinutes += stepTime;
+    }
+  }
+  
+  return db.insert(detailedTasks).values({
+    ...data,
+    estimatedTotalMinutes: Math.ceil(totalMinutes),
+    completedSteps: JSON.stringify([]),
+  });
+}
+
+export async function updateDetailedTask(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(detailedTasks).set(data).where(eq(detailedTasks.id, id));
+}
+
+export async function deleteDetailedTask(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(detailedTasks).where(eq(detailedTasks.id, id));
+}
+
+/**
+ * STEP EXECUTIONS - Registro de execução de etapas
+ */
+export async function getExecutionsByTask(detailedTaskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(stepExecutions)
+    .where(eq(stepExecutions.detailedTaskId, detailedTaskId))
+    .orderBy(stepExecutions.createdAt);
+}
+
+export async function startStepExecution(detailedTaskId: number, stepId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.insert(stepExecutions).values({
+    detailedTaskId,
+    stepId,
+    startTime: new Date(),
+    status: "Em Execução" as any,
+  });
+}
+
+export async function completeStepExecution(executionId: number, notes?: string, issues?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Buscar a execução para calcular duração
+  const execution = await db.select().from(stepExecutions).where(eq(stepExecutions.id, executionId)).limit(1);
+  if (execution.length === 0) throw new Error("Execution not found");
+  
+  const startTime = execution[0].startTime;
+  const endTime = new Date();
+  const durationMinutes = startTime ? Math.floor((endTime.getTime() - new Date(startTime).getTime()) / 60000) : 0;
+  
+  return db.update(stepExecutions).set({
+    endTime,
+    durationMinutes,
+    status: "Concluído" as any,
+    notes,
+    issues,
+  }).where(eq(stepExecutions.id, executionId));
+}
+
+/**
+ * CÁLCULO DE MATERIAIS E EQUIPAMENTOS PARA UMA TAREFA
+ */
+export async function calculateTaskRequirements(subclassId: number, area: number, floors: number = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const steps = await getStepsBySubclass(subclassId);
+  
+  const requirements = {
+    equipments: [] as any[],
+    materials: [] as any[],
+    totalTime: 0,
+    breakdown: [] as any[],
+  };
+  
+  for (const step of steps) {
+    // Calcular tempo
+    let stepTime = step.baseTimeMinutes || 0;
+    
+    switch (step.timeCalculationType) {
+      case "PER_M2":
+        stepTime = area * (step.timeCalculationValue || 0);
+        break;
+      case "PER_FLOOR":
+        stepTime = floors * (step.timeCalculationValue || 0);
+        break;
+      default:
+        stepTime = step.baseTimeMinutes || 0;
+    }
+    
+    if (step.requiresCooldown && step.maxContinuousMinutes > 0) {
+      const cycles = Math.ceil(stepTime / step.maxContinuousMinutes);
+      stepTime += (cycles - 1) * (step.cooldownMinutes || 0);
+    }
+    
+    requirements.totalTime += stepTime;
+    
+    // Buscar equipamentos
+    const stepEquips = await getEquipmentsByStep(step.id);
+    for (const eq of stepEquips) {
+      requirements.equipments.push({
+        ...eq,
+        stepName: step.name,
+      });
+    }
+    
+    // Buscar materiais
+    const stepMats = await getMaterialsByStep(step.id);
+    for (const mat of stepMats) {
+      let quantity = mat.quantity || 0;
+      
+      switch (mat.calculationType) {
+        case "PER_M2":
+          quantity = area * (mat.quantity || 0);
+          break;
+        case "PER_FLOOR":
+          quantity = floors * (mat.quantity || 0);
+          break;
+      }
+      
+      requirements.materials.push({
+        ...mat,
+        calculatedQuantity: quantity,
+        stepName: step.name,
+      });
+    }
+    
+    requirements.breakdown.push({
+      stepName: step.name,
+      stepType: step.stepType,
+      timeMinutes: Math.ceil(stepTime),
+      requiresCooldown: step.requiresCooldown,
+    });
+  }
+  
+  return requirements;
 }
