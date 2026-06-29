@@ -90,11 +90,11 @@ function writeToLogFile(
   trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
 }
 
-function vitePluginManusDebugCollector(): Plugin {
+function vitePluginManusDebugCollector() {
   return {
     name: "manus-debug-collector",
 
-    transformIndexHtml(html) {
+    transformIndexHtml(html: string) {
       if (process.env.NODE_ENV === "production") {
         return html;
       }
@@ -108,7 +108,7 @@ function vitePluginManusDebugCollector(): Plugin {
               src: "/__manus__/debug-collector.js",
               defer: true,
             },
-            injectTo: "head",
+            injectTo: "head" as const,
           },
         ],
       };
