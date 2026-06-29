@@ -48,25 +48,35 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+// Variável para rastrear se foi inicializado
+let isInitialized = false;
+
 // Inicialização condicional do ambiente
 async function initializeApp() {
+  if (isInitialized) return;
+  
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
+  
+  isInitialized = true;
 }
 
-// PARA VERCEL: Inicializa imediatamente e de forma síncrona
+// PARA VERCEL: Inicializa imediatamente
 if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-  serveStatic(app);
+  console.log("[Server] Inicializando para Vercel/produção...");
+  initializeApp().then(() => {
+    console.log("[Server] Servidor pronto para Vercel");
+  }).catch(err => {
+    console.error("[Server] Erro na inicialização:", err);
+  });
 } else {
   // Executa a configuração das rotas de arquivos para desenvolvimento
   initializeApp().catch(console.error);
-}
-
-// SÓ INICIA O LISTEN SE NÃO ESTIVER NA VERCEL
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  
+  // SÓ INICIA O LISTEN SE NÃO ESTIVER NA VERCEL
   const startLocalServer = async () => {
     const preferredPort = parseInt(process.env.PORT || "3000");
     const port = await findAvailablePort(preferredPort);
