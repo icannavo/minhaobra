@@ -289,9 +289,9 @@ export async function createProductivityRecord(data: any) {
 
   return db.insert(productivityHistory).values({
     ...data,
-    deviation: deviation.toString(),
-    deviationPercent: deviationPercent.toString(),
-    productivity: productivity.toString(),
+    deviation,
+    deviationPercent,
+    productivity,
   });
 }
 
