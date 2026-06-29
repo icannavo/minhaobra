@@ -1,6 +1,6 @@
 import { eq, and, desc } from "drizzle-orm";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client";
 import {
   InsertUser,
   users,
@@ -26,11 +26,29 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db) {
     try {
-      const sqlite = new Database("./database.sqlite");
-      _db = drizzle(sqlite);
-      console.log("[Database] SQLite conectado");
+      // Se estiver na Vercel ou tiver TURSO_URL configurado, usa libSQL remoto
+      const tursoUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+      const tursoToken = process.env.TURSO_AUTH_TOKEN;
+      
+      if (tursoUrl && tursoUrl.startsWith('libsql://')) {
+        console.log("[Database] Conectando ao Turso (libSQL remoto)...");
+        const client = createClient({
+          url: tursoUrl,
+          authToken: tursoToken,
+        });
+        _db = drizzle(client);
+        console.log("[Database] Turso conectado com sucesso");
+      } else {
+        // Fallback para SQLite local em desenvolvimento
+        console.log("[Database] Usando SQLite local (file:./database.sqlite)...");
+        const client = createClient({
+          url: "file:./database.sqlite"
+        });
+        _db = drizzle(client);
+        console.log("[Database] SQLite local conectado");
+      }
     } catch (error) {
-      console.error("[Database] Erro SQLite:", error);
+      console.error("[Database] Erro ao conectar:", error);
       _db = null;
     }
   }
