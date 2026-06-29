@@ -57,8 +57,13 @@ async function initializeApp() {
   }
 }
 
-// Executa a configuração das rotas de arquivos
-initializeApp().catch(console.error);
+// PARA VERCEL: Inicializa imediatamente e de forma síncrona
+if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+  serveStatic(app);
+} else {
+  // Executa a configuração das rotas de arquivos para desenvolvimento
+  initializeApp().catch(console.error);
+}
 
 // SÓ INICIA O LISTEN SE NÃO ESTIVER NA VERCEL
 if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
