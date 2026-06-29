@@ -1,19 +1,18 @@
 {
   "version": 2,
-  "builds": [
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "rewrites": [
     {
-      "src": "server/_core/index.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/assets/(.*)",
-      "dest": "/dist/public/assets/$1"
+      "source": "/assets/(.*)",
+      "destination": "/dist/public/assets/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "server/_core/index.ts"
+      "source": "/api/trpc/(.*)",
+      "destination": "/server/_core/index.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/server/_core/index.ts"
     }
   ]
 }

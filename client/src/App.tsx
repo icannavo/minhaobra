@@ -9,6 +9,7 @@ import DailyDashboard from "@/pages/DailyDashboard";
 import NextDayPlanning from "@/pages/NextDayPlanning";
 import Catalog from "@/pages/Catalog";
 import SpecializedTasks from "@/pages/SpecializedTasks";
+import ProductivitySettings from "@/pages/ProductivitySettings";
 import Navigation from "@/components/Navigation";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -25,6 +26,7 @@ function Router() {
       <Route path={"/next-day"} component={NextDayPlanning} />
       <Route path={"/catalog"} component={Catalog} />
       <Route path={"/tasks"} component={SpecializedTasks} />
+      <Route path={"/productivity"} component={ProductivitySettings} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

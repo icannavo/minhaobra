@@ -85,6 +85,7 @@ const Navigation = () => {
   ];
 
   const secondaryItems = [
+    { href: "/productivity", label: "Produtividade", icon: Settings },
     { href: "/team", label: "Equipe", icon: Users },
     { href: "/settings", label: "Configurações", icon: Settings },
   ];

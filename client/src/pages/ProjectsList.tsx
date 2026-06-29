@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { Calendar, Users, ArrowRight, Plus, MapPin, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { Calendar, Users, ArrowRight, Plus, MapPin, ChevronRight, TrendingUp, Clock, Briefcase } from "lucide-react";
 import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
 
 interface Project {
   id: string;
@@ -15,6 +17,30 @@ interface Project {
   progress: number;
   status: "planning" | "in-progress" | "completed";
 }
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 12
+    }
+  }
+};
 
 export default function ProjectsList() {
   const [, navigate] = useLocation();
@@ -60,143 +86,194 @@ export default function ProjectsList() {
     },
   ]);
 
+  const totalProjects = projects.length;
+  const activeProjects = projects.filter(p => p.status === "in-progress").length;
+  const completedProjects = projects.filter(p => p.status === "completed").length;
+  const totalArea = projects.reduce((sum, p) => sum + p.area, 0);
 
+  const statusConfig = {
+    planning: { 
+      className: "status-planning",
+      label: "Planejamento",
+      gradient: "from-blue-500/10 to-blue-500/5"
+    },
+    "in-progress": { 
+      className: "status-in-progress",
+      label: "Em Andamento",
+      gradient: "from-green-500/10 to-green-500/5"
+    },
+    completed: { 
+      className: "status-completed",
+      label: "Concluído",
+      gradient: "from-purple-500/10 to-purple-500/5"
+    },
+  };
 
   return (
-    <div className="page-wrapper">
-      <div className="container">
-        <div className="page-header mb-8">
-          <h1>Minhas Obras</h1>
-          <p>Acompanhe o progresso de todas as suas obras</p>
-        </div>
-
-        {projects.length === 0 ? (
-          <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
-            <p style={{ fontSize: "1.2rem", color: "#94a3b8", marginBottom: "1rem" }}>Nenhuma obra criada ainda</p>
-            <button onClick={() => navigate("/new-project")} className="btn btn-primary">
-              Criar Primeira Obra
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+      <div className="container mx-auto px-4 py-8 lg:py-12">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="section-header"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="section-title">Minhas Obras</h1>
+            <Button 
+              size="lg"
+              onClick={() => navigate("/new-project")}
+              className="gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Nova Obra
+            </Button>
           </div>
-        ) : (
-          <div style={{ display: "grid", gap: "1.5rem" }}>
-            {projects.map((project) => {
-              const statusInfo = {
-                planning: { bg: "rgba(59, 130, 246, 0.1)", border: "rgba(59, 130, 246, 0.3)", text: "#3b82f6", label: "Planejamento" },
-                "in-progress": { bg: "rgba(34, 197, 94, 0.1)", border: "rgba(34, 197, 94, 0.3)", text: "#22c55e", label: "Em Andamento" },
-                completed: { bg: "rgba(168, 85, 247, 0.1)", border: "rgba(168, 85, 247, 0.3)", text: "#a855f7", label: "Concluído" },
-              }[project.status];
-              return (
-                <div
-                  key={project.id}
-                  onClick={() => navigate(`/project/${project.id}`)}
-                  style={{
-                    background: statusInfo.bg,
-                    border: `2px solid ${statusInfo.border}`,
-                    borderRadius: "12px",
-                    padding: "1.5rem",
-                    cursor: "pointer",
-                    transition: "all 0.3s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateX(4px)";
-                    e.currentTarget.style.boxShadow = "0 10px 30px rgba(59, 130, 246, 0.2)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateX(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-                    <div>
-                      <h3 style={{ fontSize: "1.2rem", fontWeight: "600", color: "#fff", marginBottom: "0.5rem" }}>
-                        {project.name}
-                      </h3>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#94a3b8", fontSize: "0.9rem" }}>
-                        <MapPin style={{ width: "16px", height: "16px" }} />
-                        {project.location}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        background: statusInfo.bg,
-                        border: `1px solid ${statusInfo.text}`,
-                        borderRadius: "6px",
-                        padding: "0.5rem 1rem",
-                        color: statusInfo.text,
-                        fontSize: "0.85rem",
-                        fontWeight: "600",
-                      }}
-                    >
-                      {statusInfo.label}
-                    </div>
-                  </div>
+          <p className="section-subtitle">Acompanhe o progresso de todas as suas obras em tempo real</p>
+        </motion.div>
 
-                  <div style={{ marginBottom: "1.5rem" }}>
-                    <div
-                      style={{
-                        height: "8px",
-                        background: "rgba(148, 163, 184, 0.2)",
-                        borderRadius: "4px",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: "100%",
-                          background: `linear-gradient(90deg, ${statusInfo.text}, ${statusInfo.text}cc)`,
-                          width: `${project.progress}%`,
-                          transition: "width 0.3s ease",
-                        }}
-                      />
-                    </div>
-                    <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginTop: "0.5rem" }}>
-                      {project.progress}% concluído
-                    </p>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-                    <div>
-                      <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "0.25rem" }}>Área Total</p>
-                      <p style={{ fontSize: "1.1rem", fontWeight: "600", color: "#fff" }}>{project.area} m²</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "0.25rem" }}>Tipo</p>
-                      <p style={{ fontSize: "1.1rem", fontWeight: "600", color: "#fff" }}>{project.type}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "0.25rem" }}>Funcionários</p>
-                      <p style={{ fontSize: "1.1rem", fontWeight: "600", color: "#fff" }}>{project.employees}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "0.25rem" }}>Dias Estimados</p>
-                      <p style={{ fontSize: "1.1rem", fontWeight: "600", color: "#fff" }}>{project.estimatedDays}</p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#94a3b8", fontSize: "0.9rem", marginBottom: "1rem" }}>
-                    <Calendar style={{ width: "16px", height: "16px" }} />
-                    Início: {new Date(project.startDate).toLocaleDateString("pt-BR")}
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "1rem", borderTop: `1px solid ${statusInfo.border}` }}>
-                    <p style={{ color: "#94a3b8", fontSize: "0.9rem" }}>
-                      {project.status === "planning" && "Clique para começar o trabalho"}
-                      {project.status === "in-progress" && "Clique para ver tarefas do dia"}
-                      {project.status === "completed" && "Obra finalizada"}
-                    </p>
-                    <ChevronRight style={{ width: "20px", height: "20px", color: statusInfo.text }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Stats Grid */}
+        {projects.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          >
+            <div className="stats-card">
+              <div className="stats-label">Total de Obras</div>
+              <div className="stats-value text-blue-400">{totalProjects}</div>
+              <div className="stats-unit">projetos</div>
+            </div>
+            <div className="stats-card">
+              <div className="stats-label">Em Andamento</div>
+              <div className="stats-value text-green-400">{activeProjects}</div>
+              <div className="stats-unit">ativas</div>
+            </div>
+            <div className="stats-card">
+              <div className="stats-label">Concluídas</div>
+              <div className="stats-value text-purple-400">{completedProjects}</div>
+              <div className="stats-unit">finalizadas</div>
+            </div>
+            <div className="stats-card">
+              <div className="stats-label">Área Total</div>
+              <div className="stats-value text-orange-400">{totalArea}</div>
+              <div className="stats-unit">m²</div>
+            </div>
+          </motion.div>
         )}
 
-        <div style={{ marginTop: "2rem", textAlign: "center" }}>
-          <button onClick={() => navigate("/new-project")} className="btn btn-primary" style={{ minWidth: "200px" }}>
-            + Criar Nova Obra
-          </button>
-        </div>
+        {/* Projects List */}
+        {projects.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="empty-state"
+          >
+            <Briefcase className="empty-state-icon" />
+            <h3 className="empty-state-title">Nenhuma obra cadastrada</h3>
+            <p className="empty-state-text mb-6">
+              Comece criando sua primeira obra e organize todo o processo de restauração
+            </p>
+            <Button 
+              size="lg"
+              onClick={() => navigate("/new-project")}
+              className="gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Criar Primeira Obra
+            </Button>
+          </motion.div>
+        ) : (
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-4"
+          >
+            {projects.map((project) => {
+              const config = statusConfig[project.status];
+              return (
+                <motion.div
+                  key={project.id}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.01, x: 4 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => navigate(`/project/${project.id}`)}
+                  className="modern-card cursor-pointer group"
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-white mb-2 group-hover:text-primary transition-colors truncate">
+                        {project.name}
+                      </h3>
+                      <div className="flex items-center gap-2 text-slate-400 text-sm">
+                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{project.location}</span>
+                      </div>
+                    </div>
+                    <span className={`status-badge ${config.className}`}>
+                      {config.label}
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-400">Progresso</span>
+                      <span className="text-sm font-semibold text-white">{project.progress}%</span>
+                    </div>
+                    <div className="progress-container">
+                      <div 
+                        className={project.status === "completed" ? "progress-bar-success" : "progress-bar"}
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Info Grid */}
+                  <div className="info-grid mb-6">
+                    <div className="info-item">
+                      <span className="info-label">Área Total</span>
+                      <span className="info-value">{project.area} m²</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Tipo</span>
+                      <span className="info-value text-sm">{project.type}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Funcionários</span>
+                      <span className="info-value">{project.employees}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Dias Estimados</span>
+                      <span className="info-value">{project.estimatedDays}</span>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
+                    <div className="flex items-center gap-2 text-slate-400 text-sm">
+                      <Calendar className="w-4 h-4" />
+                      <span>Início: {new Date(project.startDate).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-primary font-medium text-sm group-hover:gap-3 transition-all">
+                      <span>
+                        {project.status === "planning" && "Começar trabalho"}
+                        {project.status === "in-progress" && "Ver tarefas"}
+                        {project.status === "completed" && "Ver detalhes"}
+                      </span>
+                      <ChevronRight className="w-5 h-5" />
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
       </div>
     </div>
   );
