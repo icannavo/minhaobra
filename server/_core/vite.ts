@@ -50,10 +50,8 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // Para produção na Vercel, os arquivos estão em /public
-  const distPath = process.env.VERCEL 
-    ? path.resolve(import.meta.dirname, "../..", "public")
-    : path.resolve(import.meta.dirname, "../..", "dist", "public");
+  // Alinhado para sempre buscar o build de dentro de dist/public (padrão do seu vite.config.ts)
+  const distPath = path.resolve(import.meta.dirname, "../..", "dist", "public");
 
   if (!fs.existsSync(distPath)) {
     console.error(
