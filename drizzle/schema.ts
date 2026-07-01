@@ -61,6 +61,26 @@ export type Equipment = typeof equipments.$inferSelect;
 export type InsertEquipment = typeof equipments.$inferInsert;
 
 /**
+ * EPIs - Catálogo de Equipamentos de Proteção Individual
+ */
+export const epis = sqliteTable("epis", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(), // ex: "Capacete de Segurança", "Luva de Nitrila"
+  category: text("category").notNull(), // ex: "Proteção Cabeça", "Proteção Mãos"
+  unit: text("unit").notNull(), // ex: "unidade", "par"
+  costPerUnit: real("costPerUnit"),
+  quantityInStock: real("quantityInStock").default(0),
+  minStockLevel: real("minStockLevel"),
+  description: text("description"),
+  notes: text("notes"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type Epi = typeof epis.$inferSelect;
+export type InsertEpi = typeof epis.$inferInsert;
+
+/**
  * TAREFAS DIÁRIAS - O foco principal
  * Registro de tarefas planejadas e executadas por dia
  */
@@ -405,3 +425,652 @@ export const stepExecutions = sqliteTable("step_executions", {
 
 export type StepExecution = typeof stepExecutions.$inferSelect;
 export type InsertStepExecution = typeof stepExecutions.$inferInsert;
+
+/**
+ * CRONOGRAMAS DIÁRIOS - Planejamento agregado por dia
+ * Sumariza todas as tarefas de um dia específico
+ */
+export const dailySchedules = sqliteTable("daily_schedules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workId: integer("workId").notNull(),
+  date: text("date").notNull(), // formato ISO date string
+  
+  // Resumo do dia
+  totalTasks: integer("totalTasks").default(0),
+  completedTasks: integer("completedTasks").default(0),
+  totalEstimatedMinutes: integer("totalEstimatedMinutes").default(0),
+  totalActualMinutes: integer("totalActualMinutes").default(0),
+  
+  // Metas do dia
+  targetArea: real("targetArea").default(0), // meta de m² para o dia
+  completedArea: real("completedArea").default(0), // m² realizado
+  
+  // Recursos do dia
+  numberOfEmployees: integer("numberOfEmployees").default(0),
+  totalEquipmentCost: real("totalEquipmentCost").default(0),
+  
+  // Status geral do dia
+  status: text("status", {
+    enum: ["Planejado", "Em Andamento", "Concluído", "Parcialmente Concluído", "Cancelado"]
+  }).default("Planejado"),
+  
+  // Observações
+  notes: text("notes"),
+  weather: text("weather"),
+  temperature: real("temperature"),
+  issues: text("issues"), // problemas do dia
+  achievements: text("achievements"), // conquistas/destaques
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type DailySchedule = typeof dailySchedules.$inferSelect;
+export type InsertDailySchedule = typeof dailySchedules.$inferInsert;
+
+/**
+ * TAREFAS AGENDADAS - Relacionamento entre tarefas detalhadas e horários do dia
+ * Para o sistema Kanban de arrastar tarefas para horários
+ */
+export const scheduledTasks = sqliteTable("scheduled_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dailyScheduleId: integer("dailyScheduleId").notNull(),
+  detailedTaskId: integer("detailedTaskId").notNull(),
+  
+  // Horário agendado
+  scheduledStartTime: text("scheduledStartTime"), // formato HH:mm (ex: "08:00")
+  scheduledEndTime: text("scheduledEndTime"), // calculado automaticamente
+  slotOrder: integer("slotOrder").default(0), // ordem no slot de tempo
+  
+  // Tempos reais
+  actualStartTime: integer("actualStartTime", { mode: "timestamp" }),
+  actualEndTime: integer("actualEndTime", { mode: "timestamp" }),
+  
+  // Status
+  status: text("status", {
+    enum: ["Agendado", "Em Execução", "Concluído", "Adiado", "Cancelado"]
+  }).default("Agendado"),
+  
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type ScheduledTask = typeof scheduledTasks.$inferSelect;
+export type InsertScheduledTask = typeof scheduledTasks.$inferInsert;
+
+/**
+ * METAS DIÁRIAS - Metas específicas editáveis por dia
+ */
+export const dailyGoals = sqliteTable("daily_goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dailyScheduleId: integer("dailyScheduleId").notNull(),
+  
+  goalType: text("goalType", {
+    enum: ["AREA", "TASKS", "PRODUCTIVITY", "CUSTOM"]
+  }).notNull(),
+  
+  description: text("description").notNull(),
+  targetValue: real("targetValue").notNull(),
+  achievedValue: real("achievedValue").default(0),
+  unit: text("unit"), // m², tarefas, etc
+  
+  priority: text("priority", {
+    enum: ["low", "medium", "high", "critical"]
+  }).default("medium"),
+  
+  isAchieved: integer("isAchieved", { mode: "boolean" }).default(false),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type DailyGoal = typeof dailyGoals.$inferSelect;
+export type InsertDailyGoal = typeof dailyGoals.$inferInsert;
+
+/**
+ * MEMBROS DA EQUIPE - Cadastro de funcionários
+ */
+export const teamMembers = sqliteTable("team_members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  role: text("role"), // Pintor, Pedreiro, Encarregado, etc
+  specialty: text("specialty"), // Fachadas, Estruturas, etc
+  phone: text("phone"),
+  email: text("email"),
+  
+  // Produtividade individual
+  avgProductivity: real("avgProductivity"), // m²/dia médio
+  
+  // Status
+  isActive: integer("isActive", { mode: "boolean" }).default(true),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
+/**
+ * ALOCAÇÃO DE EQUIPE - Quem trabalha em qual tarefa
+ */
+export const taskTeamAllocations = sqliteTable("task_team_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  detailedTaskId: integer("detailedTaskId").notNull(),
+  teamMemberId: integer("teamMemberId").notNull(),
+  
+  role: text("role"), // função específica nesta tarefa
+  hoursAllocated: real("hoursAllocated"),
+  hoursWorked: real("hoursWorked").default(0),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type TaskTeamAllocation = typeof taskTeamAllocations.$inferSelect;
+export type InsertTaskTeamAllocation = typeof taskTeamAllocations.$inferInsert;
+
+/**
+ * MATERIAIS - Catálogo de materiais disponíveis
+ */
+export const materials = sqliteTable("materials", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // Tinta, Massa, Selante, etc
+  type: text("type"), // Acrílico, Epóxi, etc
+  brand: text("brand"),
+  
+  unit: text("unit").notNull(), // L, kg, m, unidade
+  costPerUnit: real("costPerUnit"),
+  
+  // Estoque
+  quantityInStock: real("quantityInStock").default(0),
+  minStockLevel: real("minStockLevel"),
+  
+  // Especificações
+  yieldPerUnit: real("yieldPerUnit"), // rendimento (ex: 12 m²/L)
+  color: text("color"),
+  
+  description: text("description"),
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type Material = typeof materials.$inferSelect;
+export type InsertMaterial = typeof materials.$inferInsert;
+
+/**
+ * CONSUMO DE MATERIAIS - Registro de uso real de materiais em tarefas
+ */
+export const materialConsumptions = sqliteTable("material_consumptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  detailedTaskId: integer("detailedTaskId").notNull(),
+  materialId: integer("materialId").notNull(),
+  
+  plannedQuantity: real("plannedQuantity").default(0),
+  actualQuantity: real("actualQuantity").default(0),
+  
+  cost: real("cost"),
+  
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type MaterialConsumption = typeof materialConsumptions.$inferSelect;
+export type InsertMaterialConsumption = typeof materialConsumptions.$inferInsert;
+
+/**
+ * LOGS DE ALTERAÇÕES - Auditoria de mudanças
+ */
+export const changeLogs = sqliteTable("change_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  entityType: text("entityType").notNull(), // work, task, schedule, etc
+  entityId: integer("entityId").notNull(),
+  
+  action: text("action", {
+    enum: ["CREATE", "UPDATE", "DELETE"]
+  }).notNull(),
+  
+  fieldChanged: text("fieldChanged"),
+  oldValue: text("oldValue"),
+  newValue: text("newValue"),
+  
+  changedBy: text("changedBy"), // usuário que fez a mudança
+  reason: text("reason"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type ChangeLog = typeof changeLogs.$inferSelect;
+export type InsertChangeLog = typeof changeLogs.$inferInsert;
+
+/**
+ * RASCUNHOS DE OBRAS - Salvamento de progresso da criação de obras
+ * Permite continuar a criação depois se necessário
+ */
+export const workDrafts = sqliteTable("work_drafts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  
+  // Status do rascunho
+  status: text("status", {
+    enum: ["draft", "completed", "abandoned"]
+  }).default("draft"),
+  
+  // Dados do formulário (JSON)
+  formData: text("formData").notNull(), // JSON do estado completo
+  
+  // Controle de etapa
+  currentStep: integer("currentStep").default(1),
+  
+  // Metadados
+  lastSavedAt: integer("lastSavedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  
+  // Identificação do usuário (opcional)
+  userId: integer("userId"),
+});
+
+export type WorkDraft = typeof workDrafts.$inferSelect;
+export type InsertWorkDraft = typeof workDrafts.$inferInsert;
+
+/**
+ * PROJETOS - Base hierárquica completa de tarefas
+ * Quando um projeto é criado, gera automaticamente centenas de tarefas baseadas em WBS
+ */
+export const projects = sqliteTable("projects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workId: integer("workId").notNull(), // referência à obra
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Dimensões totais
+  totalArea: real("totalArea").default(0),
+  totalFloors: integer("totalFloors").default(1),
+  
+  // Progresso geral
+  totalTasks: integer("totalTasks").default(0),
+  completedTasks: integer("completedTasks").default(0),
+  progressPercent: real("progressPercent").default(0),
+  
+  // Datas
+  startDate: text("startDate"),
+  estimatedEndDate: text("estimatedEndDate"),
+  actualEndDate: text("actualEndDate"),
+  
+  // Status
+  status: text("status", {
+    enum: ["Planejamento", "Em Andamento", "Concluído", "Pausado", "Cancelado"]
+  }).default("Planejamento"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = typeof projects.$inferInsert;
+
+/**
+ * FASES DO PROJETO - Grandes etapas (ex: Preparação, Execução, Acabamento)
+ */
+export const projectPhases = sqliteTable("project_phases", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("projectId").notNull(),
+  name: text("name").notNull(), // ex: "Fase 1: Preparação de Superfície"
+  description: text("description"),
+  phaseOrder: integer("phaseOrder").notNull(),
+  
+  // Progresso da fase
+  totalTasks: integer("totalTasks").default(0),
+  completedTasks: integer("completedTasks").default(0),
+  progressPercent: real("progressPercent").default(0),
+  
+  // Status
+  status: text("status", {
+    enum: ["Pendente", "Em Andamento", "Concluído", "Bloqueado"]
+  }).default("Pendente"),
+  
+  // Dependências
+  dependsOnPhaseId: integer("dependsOnPhaseId"), // fase anterior necessária
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type ProjectPhase = typeof projectPhases.$inferSelect;
+export type InsertProjectPhase = typeof projectPhases.$inferInsert;
+
+/**
+ * TAREFAS DO PROJETO - Nível intermediário (ex: "Limpeza Fachada Norte")
+ * Estas são as tarefas que aparecem no Kanban para serem arrastadas
+ */
+export const projectTasks = sqliteTable("project_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("projectId").notNull(),
+  phaseId: integer("phaseId").notNull(),
+  
+  // Identificação
+  code: text("code").notNull(), // ex: "F1-T001"
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Referência ao template
+  classId: integer("classId"), // classe de tarefa (opcional)
+  subclassId: integer("subclassId"), // subclasse (opcional)
+  
+  // Dimensões específicas
+  area: real("area").default(0),
+  height: real("height").default(0),
+  width: real("width").default(0),
+  floors: integer("floors").default(1),
+  
+  // Estimativas
+  estimatedDurationMinutes: integer("estimatedDurationMinutes").default(0),
+  estimatedEmployees: integer("estimatedEmployees").default(1),
+  estimatedCost: real("estimatedCost").default(0),
+  
+  // Prioridade e ordem
+  priority: text("priority", {
+    enum: ["low", "medium", "high", "critical"]
+  }).default("medium"),
+  taskOrder: integer("taskOrder").default(0),
+  
+  // Dependências
+  dependsOnTaskIds: text("dependsOnTaskIds"), // JSON array de IDs de tarefas
+  blockedBy: text("blockedBy"), // motivo se bloqueada
+  
+  // Status no Kanban
+  kanbanStatus: text("kanbanStatus", {
+    enum: ["backlog", "scheduled", "in_progress", "completed", "cancelled"]
+  }).default("backlog"),
+  
+  // Agendamento
+  scheduledDate: text("scheduledDate"), // data agendada quando arrastada no calendário
+  scheduledStartTime: text("scheduledStartTime"), // horário no dia (HH:mm)
+  scheduledEndTime: text("scheduledEndTime"),
+  
+  // Execução real
+  actualStartTime: integer("actualStartTime", { mode: "timestamp" }),
+  actualEndTime: integer("actualEndTime", { mode: "timestamp" }),
+  actualDurationMinutes: integer("actualDurationMinutes").default(0),
+  
+  // Progresso
+  progressPercent: real("progressPercent").default(0),
+  completedArea: real("completedArea").default(0),
+  
+  // Status
+  status: text("status", {
+    enum: ["Pendente", "Agendado", "Em Preparação", "Em Execução", "Pausada", "Concluído", "Cancelado"]
+  }).default("Pendente"),
+  
+  // Subtarefas
+  totalSubtasks: integer("totalSubtasks").default(0),
+  completedSubtasks: integer("completedSubtasks").default(0),
+  
+  // Observações
+  notes: text("notes"),
+  issues: text("issues"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  completedAt: integer("completedAt", { mode: "timestamp" }),
+});
+
+export type ProjectTask = typeof projectTasks.$inferSelect;
+export type InsertProjectTask = typeof projectTasks.$inferInsert;
+
+/**
+ * SUBTAREFAS - Breakdown detalhado de cada tarefa
+ */
+export const projectSubtasks = sqliteTable("project_subtasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectTaskId: integer("projectTaskId").notNull(),
+  
+  name: text("name").notNull(),
+  description: text("description"),
+  subtaskOrder: integer("subtaskOrder").notNull(),
+  
+  // Tipo de subtarefa (baseado em taskSteps)
+  stepType: text("stepType", {
+    enum: [
+      "SAFETY_MEETING",
+      "PREPARATION",
+      "EQUIPMENT_SETUP",
+      "SCAFFOLDING",
+      "EPIs",
+      "EXECUTION",
+      "BREAK",
+      "CLEANUP",
+      "INSPECTION",
+      "EQUIPMENT_TEARDOWN",
+    ]
+  }).notNull(),
+  
+  // Tempo estimado
+  estimatedMinutes: integer("estimatedMinutes").default(0),
+  actualMinutes: integer("actualMinutes").default(0),
+  
+  // Status
+  status: text("status", {
+    enum: ["Pendente", "Em Execução", "Concluído", "Pausado", "Cancelado"]
+  }).default("Pendente"),
+  
+  // Checklist (opcional)
+  checklistItems: text("checklistItems"), // JSON array de items
+  
+  // Observações
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  completedAt: integer("completedAt", { mode: "timestamp" }),
+});
+
+export type ProjectSubtask = typeof projectSubtasks.$inferSelect;
+export type InsertProjectSubtask = typeof projectSubtasks.$inferInsert;
+
+/**
+ * KANBAN COLUMNS - Colunas personalizáveis do Kanban
+ */
+export const kanbanColumns = sqliteTable("kanban_columns", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("projectId").notNull(),
+  
+  name: text("name").notNull(), // ex: "Backlog", "Esta Semana", "Em Andamento"
+  description: text("description"),
+  columnType: text("columnType", {
+    enum: ["backlog", "scheduled", "in_progress", "review", "completed"]
+  }).notNull(),
+  
+  color: text("color").default("#gray"), // cor da coluna
+  columnOrder: integer("columnOrder").notNull(),
+  
+  // Limites (WIP - Work In Progress)
+  maxTasks: integer("maxTasks"), // limite de tarefas nesta coluna
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type KanbanColumn = typeof kanbanColumns.$inferSelect;
+export type InsertKanbanColumn = typeof kanbanColumns.$inferInsert;
+
+/**
+ * CALENDAR SLOTS - Slots de tempo no calendário diário
+ */
+export const calendarSlots = sqliteTable("calendar_slots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("projectId").notNull(),
+  date: text("date").notNull(), // formato ISO date
+  
+  // Horário do slot
+  startTime: text("startTime").notNull(), // formato HH:mm
+  endTime: text("endTime").notNull(),
+  
+  // Capacidade
+  maxTasks: integer("maxTasks").default(1), // quantas tarefas paralelas
+  currentTasks: integer("currentTasks").default(0),
+  
+  // Status
+  isAvailable: integer("isAvailable", { mode: "boolean" }).default(true),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type CalendarSlot = typeof calendarSlots.$inferSelect;
+export type InsertCalendarSlot = typeof calendarSlots.$inferInsert;
+
+/**
+ * TASK ASSIGNMENTS - Tarefas atribuídas a slots de calendário
+ * Para o sistema de arrastar tarefas para horários
+ */
+export const taskAssignments = sqliteTable("task_assignments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectTaskId: integer("projectTaskId").notNull(),
+  calendarSlotId: integer("calendarSlotId").notNull(),
+  
+  // Posição no slot (se múltiplas tarefas paralelas)
+  slotPosition: integer("slotPosition").default(0),
+  
+  // Status da atribuição
+  status: text("status", {
+    enum: ["Agendado", "Confirmado", "Em Execução", "Concluído", "Cancelado"]
+  }).default("Agendado"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type TaskAssignment = typeof taskAssignments.$inferSelect;
+export type InsertTaskAssignment = typeof taskAssignments.$inferInsert;
+
+/**
+ * PROJECT TEMPLATES - Templates de projeto para geração rápida
+ */
+export const projectTemplates = sqliteTable("project_templates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(), // ex: "Restauração Completa de Fachada"
+  description: text("description"),
+  category: text("category"), // ex: "Restauração", "Pintura", "Impermeabilização"
+  
+  // Template de fases e tarefas (JSON)
+  phasesTemplate: text("phasesTemplate"), // JSON com estrutura de fases
+  tasksTemplate: text("tasksTemplate"), // JSON com estrutura de tarefas
+  
+  // Estimativas base
+  baseAreaMultiplier: real("baseAreaMultiplier").default(1.0), // ajuste por m²
+  baseDurationDays: integer("baseDurationDays").default(30),
+  
+  isActive: integer("isActive", { mode: "boolean" }).default(true),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type ProjectTemplate = typeof projectTemplates.$inferSelect;
+export type InsertProjectTemplate = typeof projectTemplates.$inferInsert;
+
+/**
+ * DISPONIBILIDADE DE RECURSOS - Controle diário de equipamentos e equipe
+ */
+export const resourceAvailability = sqliteTable("resource_availability", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  resourceType: text("resourceType", { enum: ["equipment", "team_member", "material"] }).notNull(),
+  resourceId: integer("resourceId").notNull(), // ID do equipamento/membro/material
+  date: text("date").notNull(), // formato ISO date
+  workId: integer("workId"), // Obra onde está alocado
+  taskId: integer("taskId"), // Tarefa onde está alocado
+  isAvailable: integer("isAvailable", { mode: "boolean" }).default(true),
+  allocatedQuantity: real("allocatedQuantity").default(0), // Quantidade alocada
+  notes: text("notes"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type ResourceAvailability = typeof resourceAvailability.$inferSelect;
+export type InsertResourceAvailability = typeof resourceAvailability.$inferInsert;
+
+/**
+ * ALOCAÇÃO DIÁRIA DE EQUIPE - Quem trabalha onde e quando
+ */
+export const dailyTeamAllocations = sqliteTable("daily_team_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  teamMemberId: integer("teamMemberId").notNull(),
+  workId: integer("workId").notNull(),
+  taskId: integer("taskId"), // Tarefa específica (opcional)
+  date: text("date").notNull(),
+  
+  // Horário
+  startTime: text("startTime"), // HH:mm
+  endTime: text("endTime"),
+  
+  // Status
+  status: text("status", {
+    enum: ["scheduled", "working", "completed", "absent"]
+  }).default("scheduled"),
+  
+  // Observações
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type DailyTeamAllocation = typeof dailyTeamAllocations.$inferSelect;
+export type InsertDailyTeamAllocation = typeof dailyTeamAllocations.$inferInsert;
+
+/**
+ * ALOCAÇÃO DIÁRIA DE EQUIPAMENTOS
+ */
+export const dailyEquipmentAllocations = sqliteTable("daily_equipment_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  equipmentId: integer("equipmentId").notNull(),
+  workId: integer("workId").notNull(),
+  taskId: integer("taskId"),
+  date: text("date").notNull(),
+  
+  quantity: integer("quantity").default(1),
+  
+  status: text("status", {
+    enum: ["allocated", "in_use", "returned", "maintenance"]
+  }).default("allocated"),
+  
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type DailyEquipmentAllocation = typeof dailyEquipmentAllocations.$inferSelect;
+export type InsertDailyEquipmentAllocation = typeof dailyEquipmentAllocations.$inferInsert;
+
+/**
+ * ALOCAÇÃO DIÁRIA DE MATERIAIS
+ */
+export const dailyMaterialAllocations = sqliteTable("daily_material_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  materialId: integer("materialId").notNull(),
+  workId: integer("workId").notNull(),
+  taskId: integer("taskId"),
+  date: text("date").notNull(),
+  
+  plannedQuantity: real("plannedQuantity").default(0),
+  allocatedQuantity: real("allocatedQuantity").default(0),
+  consumedQuantity: real("consumedQuantity").default(0),
+  
+  status: text("status", {
+    enum: ["planned", "allocated", "consumed", "returned"]
+  }).default("planned"),
+  
+  notes: text("notes"),
+  
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export type DailyMaterialAllocation = typeof dailyMaterialAllocations.$inferSelect;
+export type InsertDailyMaterialAllocation = typeof dailyMaterialAllocations.$inferInsert;

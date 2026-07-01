@@ -5,7 +5,13 @@ import {
   InsertUser,
   users,
   works,
+  type InsertEquipment,
+  type Equipment,
   equipments,
+  type InsertEpi,
+  type Epi,
+  epis,
+  type InsertDailyTask,
   dailyTasks,
   taskEquipments,
   scheduleItems,
@@ -18,6 +24,15 @@ import {
   stepMaterials,
   detailedTasks,
   stepExecutions,
+  dailySchedules,
+  scheduledTasks,
+  dailyGoals,
+  teamMembers,
+  taskTeamAllocations,
+  materials,
+  materialConsumptions,
+  changeLogs,
+  workDrafts,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -654,7 +669,7 @@ export async function createDetailedTask(data: any) {
     }
     
     // Adicionar tempo de cooldown se necessário
-    if (step.requiresCooldown && step.maxContinuousMinutes > 0) {
+    if (step.requiresCooldown && step.maxContinuousMinutes !== null && step.maxContinuousMinutes > 0) {
       const cycles = Math.ceil(stepTime / step.maxContinuousMinutes);
       totalMinutes += stepTime + (cycles - 1) * (step.cooldownMinutes || 0);
     } else {
@@ -758,7 +773,7 @@ export async function calculateTaskRequirements(subclassId: number, area: number
         stepTime = step.baseTimeMinutes || 0;
     }
     
-    if (step.requiresCooldown && step.maxContinuousMinutes > 0) {
+    if (step.requiresCooldown && step.maxContinuousMinutes !== null && step.maxContinuousMinutes > 0) {
       const cycles = Math.ceil(stepTime / step.maxContinuousMinutes);
       stepTime += (cycles - 1) * (step.cooldownMinutes || 0);
     }
@@ -804,4 +819,702 @@ export async function calculateTaskRequirements(subclassId: number, area: number
   }
   
   return requirements;
+}
+
+
+/**
+ * ========================================
+ * OBRAS - CRUD COMPLETO
+ * ========================================
+ */
+
+export async function updateWork(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(works).set(data).where(eq(works.id, id));
+}
+
+export async function deleteWork(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(works).where(eq(works.id, id));
+}
+
+/**
+ * ========================================
+ * EQUIPAMENTOS - CRUD COMPLETO
+ * ========================================
+ */
+
+export async function getEquipmentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(equipments).where(eq(equipments.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateEquipment(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(equipments).set(data).where(eq(equipments.id, id));
+}
+
+export async function deleteEquipment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(equipments).where(eq(equipments.id, id));
+}
+
+/**
+ * ========================================
+ * EPIS - CRUD
+ * ========================================
+ */
+export async function getAllEpis() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(epis).orderBy(epis.category);
+}
+
+export async function getEpiById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(epis).where(eq(epis.id, id));
+  return result[0] || null;
+}
+
+export async function createEpi(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(epis).values(data);
+}
+
+export async function updateEpi(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(epis).set(data).where(eq(epis.id, id));
+}
+
+export async function deleteEpi(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(epis).where(eq(epis.id, id));
+}
+
+/**
+ * ========================================
+ * CRONOGRAMAS DIÁRIOS - NOVO SISTEMA
+ * ========================================
+ */
+
+export async function getDailyScheduleByDate(workId: number, date: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(dailySchedules)
+    .where(and(eq(dailySchedules.workId, workId), eq(dailySchedules.date, date as any)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getDailySchedulesByWork(workId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(dailySchedules)
+    .where(eq(dailySchedules.workId, workId))
+    .orderBy(desc(dailySchedules.date));
+}
+
+export async function createDailySchedule(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(dailySchedules).values(data);
+}
+
+export async function updateDailySchedule(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(dailySchedules).set(data).where(eq(dailySchedules.id, id));
+}
+
+export async function deleteDailySchedule(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(dailySchedules).where(eq(dailySchedules.id, id));
+}
+
+/**
+ * Gerar cronograma diário automaticamente
+ */
+export async function generateDailySchedule(workId: number, date: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Buscar todas as tarefas deste dia
+  const tasks = await getDetailedTasksByWork(workId, date);
+
+  // Calcular totais
+  const totalTasks = tasks.length;
+  const totalEstimatedMinutes = tasks.reduce((sum, t: any) => sum + (t.estimatedTotalMinutes || 0), 0);
+  const completedTasks = tasks.filter((t: any) => t.status === "Concluído").length;
+  const totalActualMinutes = tasks.reduce((sum, t: any) => sum + (t.actualTotalMinutes || 0), 0);
+  const targetArea = tasks.reduce((sum, t: any) => sum + (t.area || 0), 0);
+
+  // Verificar se já existe
+  const existing = await getDailyScheduleByDate(workId, date);
+
+  if (existing) {
+    // Atualizar
+    return updateDailySchedule(existing.id, {
+      totalTasks,
+      completedTasks,
+      totalEstimatedMinutes,
+      totalActualMinutes,
+      targetArea,
+      status: completedTasks === totalTasks && totalTasks > 0 ? "Concluído" : 
+              completedTasks > 0 ? "Parcialmente Concluído" : 
+              totalTasks > 0 ? "Em Andamento" : "Planejado",
+    });
+  } else {
+    // Criar novo
+    return createDailySchedule({
+      workId,
+      date,
+      totalTasks,
+      completedTasks,
+      totalEstimatedMinutes,
+      totalActualMinutes,
+      targetArea,
+      completedArea: 0,
+      status: "Planejado",
+    });
+  }
+}
+
+/**
+ * ========================================
+ * TAREFAS AGENDADAS - KANBAN
+ * ========================================
+ */
+
+export async function getScheduledTasksByDay(dailyScheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(scheduledTasks)
+    .where(eq(scheduledTasks.dailyScheduleId, dailyScheduleId))
+    .orderBy(scheduledTasks.scheduledStartTime, scheduledTasks.slotOrder);
+}
+
+export async function createScheduledTask(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(scheduledTasks).values(data);
+}
+
+export async function updateScheduledTask(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(scheduledTasks).set(data).where(eq(scheduledTasks.id, id));
+}
+
+export async function deleteScheduledTask(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(scheduledTasks).where(eq(scheduledTasks.id, id));
+}
+
+export async function getScheduledTasksByDate(workId: number, date: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const dailyScheduleResult = await db
+    .select({ id: dailySchedules.id })
+    .from(dailySchedules)
+    .where(and(eq(dailySchedules.workId, workId), eq(dailySchedules.date, date)))
+    .limit(1);
+  
+  if (dailyScheduleResult.length === 0) return [];
+  
+  const scheduleId = dailyScheduleResult[0].id;
+  return db
+    .select()
+    .from(scheduledTasks)
+    .where(eq(scheduledTasks.dailyScheduleId, scheduleId));
+}
+
+export async function getStepEquipmentsByStepId(stepId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db
+    .select({
+      id: stepEquipments.id,
+      stepId: stepEquipments.stepId,
+      equipmentId: stepEquipments.equipmentId,
+      quantity: stepEquipments.quantity,
+      required: stepEquipments.required,
+      equipment: equipments,
+    })
+    .from(stepEquipments)
+    .leftJoin(equipments, eq(stepEquipments.equipmentId, equipments.id))
+    .where(eq(stepEquipments.stepId, stepId));
+    
+  return results;
+}
+
+export async function getStepMaterialsByStepId(stepId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(stepMaterials)
+    .where(eq(stepMaterials.stepId, stepId));
+}
+
+export async function getTaskTeamAllocations(detailedTaskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(taskTeamAllocations)
+    .where(eq(taskTeamAllocations.detailedTaskId, detailedTaskId));
+}
+
+export async function getUsageToday(workId: number, date: string) {
+  const db = await getDb();
+  if (!db) {
+    return {
+      equipmentsInUse: [],
+      materialsInUse: [],
+      teamInUse: []
+    };
+  }
+  
+  const scheduled = await getScheduledTasksByDate(workId, date);
+  const equipmentIds = new Set<number>();
+  const materialIds = new Set<number>();
+  const teamMemberIds = new Set<number>();
+  
+  for (const st of scheduled) {
+    // Get detailed task
+    const detailedTask = await db
+      .select()
+      .from(detailedTasks)
+      .where(eq(detailedTasks.id, st.detailedTaskId))
+      .limit(1);
+    
+    if (detailedTask.length === 0) continue;
+    
+    // Get all steps for this task's class/subclass
+    const steps = await db
+      .select()
+      .from(taskSteps)
+      .where(eq(taskSteps.subclassId, detailedTask[0].subclassId));
+    
+    // Get equipment from each step
+    for (const step of steps) {
+      const stepEquips = await getStepEquipmentsByStepId(step.id);
+      stepEquips.forEach(se => equipmentIds.add(se.equipmentId));
+    }
+    
+    // Get materials from each step
+    for (const step of steps) {
+      const stepMats = await getStepMaterialsByStepId(step.id);
+      // For materials, we can track by name/category or we need to map to material IDs
+      // For now, we'll just add dummy logic as we might need material ID mapping
+      // stepMats.forEach(sm => materialIds.add(sm.id)); - but stepMaterials doesn't have materialId, only materialName
+    }
+    
+    // Get team allocations
+    const teamAllocations = await getTaskTeamAllocations(st.detailedTaskId);
+    teamAllocations.forEach(ta => ta.teamMemberId && teamMemberIds.add(ta.teamMemberId));
+  }
+  
+  return {
+    equipmentsInUse: Array.from(equipmentIds),
+    materialsInUse: Array.from(materialIds),
+    teamInUse: Array.from(teamMemberIds)
+  };
+}
+
+/**
+ * ========================================
+ * METAS DIÁRIAS
+ * ========================================
+ */
+
+export async function getDailyGoals(dailyScheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(dailyGoals)
+    .where(eq(dailyGoals.dailyScheduleId, dailyScheduleId))
+    .orderBy(desc(dailyGoals.priority));
+}
+
+export async function createDailyGoal(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(dailyGoals).values(data);
+}
+
+export async function updateDailyGoal(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(dailyGoals).set(data).where(eq(dailyGoals.id, id));
+}
+
+export async function deleteDailyGoal(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(dailyGoals).where(eq(dailyGoals.id, id));
+}
+
+/**
+ * ========================================
+ * MEMBROS DA EQUIPE
+ * ========================================
+ */
+
+export async function getAllTeamMembers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(teamMembers).where(eq(teamMembers.isActive, true)).orderBy(teamMembers.name);
+}
+
+export async function getTeamMemberById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(teamMembers).where(eq(teamMembers.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createTeamMember(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(teamMembers).values(data);
+}
+
+export async function updateTeamMember(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(teamMembers).set(data).where(eq(teamMembers.id, id));
+}
+
+export async function deleteTeamMember(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(teamMembers).where(eq(teamMembers.id, id));
+}
+
+/**
+ * ========================================
+ * MATERIAIS
+ * ========================================
+ */
+
+export async function getAllMaterials() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(materials).orderBy(materials.category, materials.name);
+}
+
+export async function getMaterialById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createMaterial(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(materials).values(data);
+}
+
+export async function updateMaterial(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(materials).set(data).where(eq(materials.id, id));
+}
+
+export async function deleteMaterial(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(materials).where(eq(materials.id, id));
+}
+
+/**
+ * ========================================
+ * CONSUMO DE MATERIAIS
+ * ========================================
+ */
+
+export async function getMaterialConsumptions(detailedTaskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(materialConsumptions)
+    .where(eq(materialConsumptions.detailedTaskId, detailedTaskId));
+}
+
+export async function recordMaterialConsumption(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(materialConsumptions).values(data);
+}
+
+export async function updateMaterialConsumption(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(materialConsumptions).set(data).where(eq(materialConsumptions.id, id));
+}
+
+export async function deleteMaterialConsumption(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(materialConsumptions).where(eq(materialConsumptions.id, id));
+}
+
+/**
+ * ========================================
+ * FUNÇÕES AUXILIARES PARA RELATÓRIOS E CÁLCULOS
+ * ========================================
+ */
+
+/**
+ * Calcula o progresso geral de uma obra baseado na área concluída
+ */
+export async function calculateWorkProgress(workId: number) {
+  const db = await getDb();
+  if (!db) return { percentage: 0, totalArea: 0, completedArea: 0 };
+
+  // Buscar todas as tarefas detalhadas da obra
+  const tasks = await db
+    .select()
+    .from(detailedTasks)
+    .where(eq(detailedTasks.workId, workId));
+
+  const totalArea = tasks.reduce((sum: number, t: any) => sum + (Number(t.area) || 0), 0);
+  
+  // Área concluída = soma de áreas das tarefas concluídas
+  const completedArea = tasks
+    .filter((t: any) => t.status === "Concluído")
+    .reduce((sum: number, t: any) => sum + (Number(t.area) || 0), 0);
+
+  const percentage = totalArea > 0 ? (completedArea / totalArea) * 100 : 0;
+
+  return {
+    percentage: Math.round(percentage * 100) / 100,
+    totalArea,
+    completedArea,
+    totalTasks: tasks.length,
+    completedTasks: tasks.filter((t: any) => t.status === "Concluído").length,
+  };
+}
+
+/**
+ * Reagendar tarefas não concluídas para o próximo dia disponível
+ */
+export async function rescheduleIncompleteTasks(workId: number, fromDate: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Buscar tarefas não concluídas do dia especificado
+  const incompleteTasks = await db
+    .select()
+    .from(detailedTasks)
+    .where(
+      and(
+        eq(detailedTasks.workId, workId),
+        eq(detailedTasks.date, fromDate as any),
+        eq(detailedTasks.status, "Em Execução" as any)
+      )
+    );
+
+  // Calcular próximo dia
+  const nextDate = new Date(fromDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+  // Mover cada tarefa para o próximo dia
+  for (const task of incompleteTasks) {
+    await db.update(detailedTasks)
+      .set({
+        date: nextDateStr as any,
+        status: "Adiado" as any,
+      })
+      .where(eq(detailedTasks.id, task.id));
+
+    // Criar alerta
+    await createAlert({
+      workId,
+      type: "TAREFA_ATRASADA",
+      title: "Tarefa Reagendada",
+      message: `A tarefa "${task.taskName}" foi reagendada de ${fromDate} para ${nextDateStr}`,
+      severity: "warning",
+    });
+  }
+
+  return incompleteTasks.length;
+}
+
+/**
+ * Gera relatório diário com resumo das tarefas
+ */
+export async function generateDailyReport(workId: number, date: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Buscar cronograma do dia
+  const schedule = await getDailyScheduleByDate(workId, date);
+  
+  // Buscar todas as tarefas do dia
+  const tasks = await getDetailedTasksByWork(workId, date);
+
+  // Calcular estatísticas
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t: any) => t.status === "Concluído").length;
+  const inProgressTasks = tasks.filter((t: any) => t.status === "Em Execução" || t.status === "Em Preparação").length;
+  const pendingTasks = tasks.filter((t: any) => t.status === "Planejado").length;
+
+  const targetArea = tasks.reduce((sum: number, t: any) => sum + (Number(t.area) || 0), 0);
+  const completedArea = tasks
+    .filter((t: any) => t.status === "Concluído")
+    .reduce((sum: number, t: any) => sum + (Number(t.area) || 0), 0);
+
+  const estimatedMinutes = tasks.reduce((sum: number, t: any) => sum + (t.estimatedTotalMinutes || 0), 0);
+  const actualMinutes = tasks.reduce((sum: number, t: any) => sum + (t.actualTotalMinutes || 0), 0);
+
+  // Buscar metas do dia
+  const goals = schedule ? await getDailyGoals(schedule.id) : [];
+
+  return {
+    date,
+    schedule,
+    summary: {
+      totalTasks,
+      completedTasks,
+      inProgressTasks,
+      pendingTasks,
+      completionRate: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0,
+    },
+    area: {
+      target: targetArea,
+      completed: completedArea,
+      remaining: targetArea - completedArea,
+      completionRate: targetArea > 0 ? (completedArea / targetArea) * 100 : 0,
+    },
+    time: {
+      estimated: estimatedMinutes,
+      actual: actualMinutes,
+      variance: actualMinutes - estimatedMinutes,
+    },
+    goals,
+    tasks,
+  };
+}
+
+/**
+ * Calcular estimativa de conclusão da obra baseada na produtividade recente
+ */
+export async function estimateCompletionDate(workId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Buscar histórico recente (últimos 7 dias)
+  const history = await db
+    .select()
+    .from(productivityHistory)
+    .where(eq(productivityHistory.workId, workId))
+    .orderBy(desc(productivityHistory.date))
+    .limit(7);
+
+  if (history.length === 0) return null;
+
+  // Calcular produtividade média
+  const avgProductivity = history.reduce((sum, h) => sum + (Number(h.productivity) || 0), 0) / history.length;
+
+  // Buscar área restante
+  const progress = await calculateWorkProgress(workId);
+  const remainingArea = progress.totalArea - progress.completedArea;
+
+  // Buscar obra para pegar número médio de funcionários
+  const work = await getWorkById(workId);
+  if (!work) return null;
+
+  // Estimar dias necessários (assumindo mesmo número de funcionários)
+  const tasks = await db.select().from(detailedTasks).where(eq(detailedTasks.workId, workId));
+  const avgEmployees = tasks.length > 0 
+    ? tasks.reduce((sum: number, t: any) => sum + (t.numberOfEmployees || 0), 0) / tasks.length 
+    : 1;
+
+  const daysNeeded = avgProductivity > 0 && avgEmployees > 0
+    ? Math.ceil(remainingArea / (avgProductivity * avgEmployees))
+    : 0;
+
+  const estimatedDate = new Date();
+  estimatedDate.setDate(estimatedDate.getDate() + daysNeeded);
+
+  return {
+    remainingArea,
+    avgProductivity,
+    avgEmployees,
+    daysNeeded,
+    estimatedCompletionDate: estimatedDate.toISOString().slice(0, 10),
+    originalEstimatedEnd: work.estimatedEndDate,
+  };
+}
+
+
+/**
+ * ========================================
+ * RASCUNHOS DE OBRAS - NOVO
+ * ========================================
+ */
+
+export async function getLatestWorkDraft() {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(workDrafts)
+    .where(eq(workDrafts.status, "draft" as any))
+    .orderBy(desc(workDrafts.lastSavedAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createWorkDraft(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(workDrafts).values({
+    ...data,
+    status: "draft",
+  }).returning();
+  return result[0];
+}
+
+export async function updateWorkDraft(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const updateData = {
+    ...data,
+    lastSavedAt: new Date(),
+  };
+  await db.update(workDrafts).set(updateData).where(eq(workDrafts.id, id));
+  return { id, ...updateData };
+}
+
+export async function deleteWorkDraft(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(workDrafts).where(eq(workDrafts.id, id));
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { Step3Rooms } from "./NewProject/Step3Rooms";
@@ -17,7 +17,10 @@ import {
   Calendar,
   MapPin,
   Building,
-  AlertCircle
+  AlertCircle,
+  Save,
+  Trash,
+  Cloud
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +28,8 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useWorkDraftAutoSave } from "@/hooks/useWorkDraftAutoSave";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // ==================== TYPES ====================
 interface Room {
@@ -116,6 +121,7 @@ const STEPS = [
 export default function NewProject() {
   const [, navigate] = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
+  const isMobile = useIsMobile();
   
   // Only enforce authentication if OAuth is configured
   const isOAuthConfigured = import.meta.env.VITE_OAUTH_PORTAL_URL && import.meta.env.VITE_APP_ID;
@@ -134,8 +140,30 @@ export default function NewProject() {
     workDays: ["seg", "ter", "qua", "qui", "sex"]
   });
 
+  // Estado para controlar se o rascunho foi restaurado
+  const [isDraftRestored, setIsDraftRestored] = useState(false);
+
+  // Auto-save de rascunhos
+  const { 
+    isLoading: isDraftLoading, 
+    isSaving, 
+    hasExistingDraft,
+    discardDraft,
+    completeDraft 
+  } = useWorkDraftAutoSave({
+    formData,
+    currentStep,
+    enabled: true,
+    onRestored: (data) => {
+      setFormData(data.formData);
+      setCurrentStep(data.currentStep);
+      setIsDraftRestored(true);
+    },
+  });
+
   const createWorkMutation = trpc.works.create.useMutation({
     onSuccess: () => {
+      completeDraft(); // Marcar rascunho como completo
       toast.success("Obra criada com sucesso!");
       navigate("/projects");
     },
@@ -144,13 +172,15 @@ export default function NewProject() {
     }
   });
 
-  // Show loading state while checking authentication (only if OAuth is configured)
-  if (isOAuthConfigured && authLoading) {
+  // Show loading state while checking authentication or loading draft
+  if ((isOAuthConfigured && authLoading) || isDraftLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-400">Verificando autenticação...</p>
+          <p className="text-slate-400">
+            {isDraftLoading ? "Carregando rascunho..." : "Verificando autenticação..."}
+          </p>
         </div>
       </div>
     );
@@ -572,6 +602,53 @@ export default function NewProject() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <div className="container mx-auto px-4 py-8 lg:py-12 max-w-6xl">
+        {/* Header com indicador de salvamento */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {isSaving && (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <Cloud className="w-4 h-4 animate-pulse" />
+                <span>Salvando...</span>
+              </div>
+            )}
+            {!isSaving && isDraftRestored && (
+              <div className="flex items-center gap-2 text-sm text-green-400">
+                <Check className="w-4 h-4" />
+                <span>Rascunho salvo</span>
+              </div>
+            )}
+          </div>
+          
+          {(isDraftRestored || hasExistingDraft) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm('Tem certeza que deseja descartar este rascunho?')) {
+                  discardDraft();
+                  // Resetar formulário
+                  setFormData({
+                    type: "",
+                    items: { epis: [], tools: [], materials: [], equipment: [] },
+                    rooms: [],
+                    name: "",
+                    location: "",
+                    employees: 1,
+                    startDate: new Date().toISOString().split('T')[0],
+                    workDays: ["seg", "ter", "qua", "qui", "sex"]
+                  });
+                  setCurrentStep(1);
+                  setIsDraftRestored(false);
+                }
+              }}
+              className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            >
+              <Trash className="w-4 h-4" />
+              {isMobile ? "" : "Descartar Rascunho"}
+            </Button>
+          )}
+        </div>
+
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">

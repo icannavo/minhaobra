@@ -25,6 +25,26 @@ const worksRouter = router({
       })
     )
     .mutation(({ input }) => db.createWork(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        code: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        location: z.string().optional(),
+        status: z.enum(["Planejamento", "Em Andamento", "Concluído", "Pausada"]).optional(),
+        startDate: z.string().optional(),
+        estimatedEndDate: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateWork(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteWork(input.id)),
 });
 
 /**
@@ -32,7 +52,10 @@ const worksRouter = router({
  */
 const equipmentsRouter = router({
   getAll: publicProcedure.query(() => db.getAllEquipments()),
-  create: protectedProcedure
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getEquipmentById(input.id)),
+  create: publicProcedure // Temporariamente público até OAuth configurado
     .input(
       z.object({
         name: z.string(),
@@ -44,6 +67,70 @@ const equipmentsRouter = router({
       })
     )
     .mutation(({ input }) => db.createEquipment(input)),
+  update: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        category: z.string().optional(),
+        costPerDay: z.string().optional(),
+        costPerHour: z.string().optional(),
+        quantity: z.number().optional(),
+        description: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateEquipment(id, data);
+    }),
+  delete: publicProcedure // Temporariamente público até OAuth configurado
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteEquipment(input.id)),
+});
+
+/**
+ * EPIs ROUTER
+ */
+const episRouter = router({
+  getAll: publicProcedure.query(() => db.getAllEpis()),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getEpiById(input.id)),
+  create: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        name: z.string(),
+        category: z.string(),
+        unit: z.string(),
+        costPerUnit: z.number().optional(),
+        quantityInStock: z.number().optional(),
+        minStockLevel: z.number().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createEpi(input)),
+  update: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        category: z.string().optional(),
+        unit: z.string().optional(),
+        costPerUnit: z.number().optional(),
+        quantityInStock: z.number().optional(),
+        minStockLevel: z.number().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateEpi(id, data);
+    }),
+  delete: publicProcedure // Temporariamente público até OAuth configurado
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteEpi(input.id)),
 });
 
 /**
@@ -452,6 +539,390 @@ const stepExecutionsRouter = router({
 });
 
 /**
+ * CRONOGRAMAS DIÁRIOS ROUTER - NOVO
+ */
+const dailySchedulesRouter = router({
+  getByWork: publicProcedure
+    .input(z.object({ workId: z.number() }))
+    .query(({ input }) => db.getDailySchedulesByWork(input.workId)),
+  getByDate: publicProcedure
+    .input(z.object({ workId: z.number(), date: z.string() }))
+    .query(({ input }) => db.getDailyScheduleByDate(input.workId, input.date)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        workId: z.number(),
+        date: z.string(),
+        targetArea: z.number().optional(),
+        numberOfEmployees: z.number().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createDailySchedule(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        targetArea: z.number().optional(),
+        completedArea: z.number().optional(),
+        numberOfEmployees: z.number().optional(),
+        status: z.enum(["Planejado", "Em Andamento", "Concluído", "Parcialmente Concluído", "Cancelado"]).optional(),
+        notes: z.string().optional(),
+        weather: z.string().optional(),
+        temperature: z.number().optional(),
+        issues: z.string().optional(),
+        achievements: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateDailySchedule(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteDailySchedule(input.id)),
+  generate: protectedProcedure
+    .input(z.object({ workId: z.number(), date: z.string() }))
+    .mutation(({ input }) => db.generateDailySchedule(input.workId, input.date)),
+});
+
+/**
+ * TAREFAS AGENDADAS ROUTER - KANBAN
+ */
+const scheduledTasksRouter = router({
+  getByDay: publicProcedure
+    .input(z.object({ dailyScheduleId: z.number() }))
+    .query(({ input }) => db.getScheduledTasksByDay(input.dailyScheduleId)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        dailyScheduleId: z.number(),
+        detailedTaskId: z.number(),
+        scheduledStartTime: z.string(),
+        slotOrder: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createScheduledTask(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        scheduledStartTime: z.string().optional(),
+        slotOrder: z.number().optional(),
+        status: z.enum(["Agendado", "Em Execução", "Concluído", "Adiado", "Cancelado"]).optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateScheduledTask(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteScheduledTask(input.id)),
+});
+
+/**
+ * METAS DIÁRIAS ROUTER
+ */
+const dailyGoalsRouter = router({
+  getBySchedule: publicProcedure
+    .input(z.object({ dailyScheduleId: z.number() }))
+    .query(({ input }) => db.getDailyGoals(input.dailyScheduleId)),
+  create: protectedProcedure
+    .input(
+      z.object({
+        dailyScheduleId: z.number(),
+        goalType: z.enum(["AREA", "TASKS", "PRODUCTIVITY", "CUSTOM"]),
+        description: z.string(),
+        targetValue: z.number(),
+        unit: z.string().optional(),
+        priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+      })
+    )
+    .mutation(({ input }) => db.createDailyGoal(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        description: z.string().optional(),
+        targetValue: z.number().optional(),
+        achievedValue: z.number().optional(),
+        priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+        isAchieved: z.boolean().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateDailyGoal(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteDailyGoal(input.id)),
+});
+
+/**
+ * MEMBROS DA EQUIPE ROUTER
+ */
+const teamMembersRouter = router({
+  getAll: publicProcedure.query(() => db.getAllTeamMembers()),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getTeamMemberById(input.id)),
+  create: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        name: z.string(),
+        role: z.string().optional(),
+        specialty: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        avgProductivity: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createTeamMember(input)),
+  update: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        role: z.string().optional(),
+        specialty: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        avgProductivity: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTeamMember(id, data);
+    }),
+  delete: publicProcedure // Temporariamente público até OAuth configurado
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteTeamMember(input.id)),
+});
+
+/**
+ * MATERIAIS ROUTER
+ */
+const materialsRouter = router({
+  getAll: publicProcedure.query(() => db.getAllMaterials()),
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => db.getMaterialById(input.id)),
+  create: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        name: z.string(),
+        category: z.string(),
+        type: z.string().optional(),
+        brand: z.string().optional(),
+        unit: z.string(),
+        costPerUnit: z.number().optional(),
+        quantityInStock: z.number().optional(),
+        minStockLevel: z.number().optional(),
+        yieldPerUnit: z.number().optional(),
+        color: z.string().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.createMaterial(input)),
+  update: publicProcedure // Temporariamente público até OAuth configurado
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        category: z.string().optional(),
+        type: z.string().optional(),
+        brand: z.string().optional(),
+        unit: z.string().optional(),
+        costPerUnit: z.number().optional(),
+        quantityInStock: z.number().optional(),
+        minStockLevel: z.number().optional(),
+        yieldPerUnit: z.number().optional(),
+        color: z.string().optional(),
+        description: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateMaterial(id, data);
+    }),
+  delete: publicProcedure // Temporariamente público até OAuth configurado
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteMaterial(input.id)),
+});
+
+/**
+ * CONSUMO DE MATERIAIS ROUTER
+ */
+const materialConsumptionsRouter = router({
+  getByTask: publicProcedure
+    .input(z.object({ detailedTaskId: z.number() }))
+    .query(({ input }) => db.getMaterialConsumptions(input.detailedTaskId)),
+  record: protectedProcedure
+    .input(
+      z.object({
+        detailedTaskId: z.number(),
+        materialId: z.number(),
+        plannedQuantity: z.number().optional(),
+        actualQuantity: z.number(),
+        cost: z.number().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => db.recordMaterialConsumption(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        actualQuantity: z.number().optional(),
+        cost: z.number().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateMaterialConsumption(id, data);
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteMaterialConsumption(input.id)),
+});
+
+/**
+ * ALOCAÇÃO DE EQUIPE ROUTER
+ */
+const taskTeamAllocationsRouter = router({
+  getByTask: publicProcedure
+    .input(z.object({ detailedTaskId: z.number() }))
+    .query(({ input }) => db.getTaskTeamAllocations(input.detailedTaskId)),
+  allocate: protectedProcedure
+    .input(
+      z.object({
+        detailedTaskId: z.number(),
+        teamMemberId: z.number(),
+        role: z.string().optional(),
+        hoursAllocated: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => db.allocateTeamMember(input)),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        role: z.string().optional(),
+        hoursAllocated: z.number().optional(),
+        hoursWorked: z.number().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTeamAllocation(id, data);
+    }),
+  remove: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.removeTeamAllocation(input.id)),
+});
+
+/**
+ * RELATÓRIOS E ANÁLISES ROUTER
+ */
+const reportsRouter = router({
+  workProgress: publicProcedure
+    .input(z.object({ workId: z.number() }))
+    .query(({ input }) => db.calculateWorkProgress(input.workId)),
+  dailyReport: publicProcedure
+    .input(z.object({ workId: z.number(), date: z.string() }))
+    .query(({ input }) => db.generateDailyReport(input.workId, input.date)),
+  estimateCompletion: publicProcedure
+    .input(z.object({ workId: z.number() }))
+    .query(({ input }) => db.estimateCompletionDate(input.workId)),
+  rescheduleIncomplete: protectedProcedure
+    .input(z.object({ workId: z.number(), fromDate: z.string() }))
+    .mutation(({ input }) => db.rescheduleIncompleteTasks(input.workId, input.fromDate)),
+});
+
+/**
+ * EQUIPAMENTOS DAS ETAPAS ROUTER - PASSO 6
+ */
+const stepEquipmentsRouter = router({
+  getByStep: publicProcedure
+    .input(z.object({ stepId: z.number() }))
+    .query(({ input }) => db.getStepEquipmentsByStepId(input.stepId)),
+  add: protectedProcedure
+    .input(
+      z.object({
+        stepId: z.number(),
+        equipmentId: z.number(),
+        quantity: z.number().default(1),
+        required: z.boolean().default(true),
+      })
+    )
+    .mutation(({ input }) => db.addStepEquipment(input)),
+  remove: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.removeStepEquipment(input.id)),
+});
+
+/**
+ * MATERIAIS DAS ETAPAS ROUTER - PASSO 6
+ */
+const stepMaterialsRouter = router({
+  getByStep: publicProcedure
+    .input(z.object({ stepId: z.number() }))
+    .query(({ input }) => db.getStepMaterialsByStepId(input.stepId)),
+  add: protectedProcedure
+    .input(
+      z.object({
+        stepId: z.number(),
+        materialId: z.number().optional(),
+        materialName: z.string(),
+        quantity: z.number(),
+        unit: z.string(),
+        required: z.boolean().default(true),
+      })
+    )
+    .mutation(({ input }) => db.addStepMaterial(input)),
+  remove: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.removeStepMaterial(input.id)),
+});
+
+/**
+ * RASCUNHOS DE OBRAS ROUTER - NOVO
+ */
+const workDraftsRouter = router({
+  getLatest: publicProcedure.query(() => db.getLatestWorkDraft()),
+  create: publicProcedure
+    .input(
+      z.object({
+        formData: z.string(),
+        currentStep: z.number(),
+      })
+    )
+    .mutation(({ input }) => db.createWorkDraft(input)),
+  update: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        formData: z.string().optional(),
+        currentStep: z.number().optional(),
+        status: z.enum(["draft", "completed", "abandoned"]).optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return db.updateWorkDraft(id, data);
+    }),
+  delete: publicProcedure
+    .input(z.number())
+    .mutation(({ input }) => db.deleteWorkDraft(input)),
+});
+
+/**
  * MAIN APP ROUTER
  */
 export const appRouter = router({
@@ -469,7 +940,9 @@ export const appRouter = router({
 
   // Feature routers - Foco em tarefas diárias e cronograma dinâmico
   works: worksRouter,
+  workDrafts: workDraftsRouter,
   equipments: equipmentsRouter,
+  epis: episRouter,
   dailyTasks: dailyTasksRouter,
   taskEquipments: taskEquipmentsRouter,
   schedule: scheduleRouter,
@@ -482,6 +955,36 @@ export const appRouter = router({
   taskSteps: taskStepsRouter,
   detailedTasks: detailedTasksRouter,
   stepExecutions: stepExecutionsRouter,
+
+  // NOVO: Cronogramas diários e Kanban
+  dailySchedules: dailySchedulesRouter,
+  scheduledTasks: scheduledTasksRouter,
+  dailyGoals: dailyGoalsRouter,
+
+  // NOVO: Equipe e materiais
+  teamMembers: teamMembersRouter,
+  materials: materialsRouter,
+  materialConsumptions: materialConsumptionsRouter,
+  taskTeamAllocations: taskTeamAllocationsRouter,
+
+  // NOVO: Relatórios e análises
+  reports: reportsRouter,
+  
+  // NOVO: Equipamentos e materiais das etapas (PASSO 6)
+  stepEquipments: stepEquipmentsRouter,
+  stepMaterials: stepMaterialsRouter,
+  
+  // NOVO: Catalog
+  catalog: router({
+    getUsageToday: publicProcedure
+      .input(z.object({ 
+        workId: z.number(),
+        date: z.string() 
+      }))
+      .query(async ({ input }) => {
+        return db.getUsageToday(input.workId, input.date);
+      })
+  }),
 });
 
 export type AppRouter = typeof appRouter;

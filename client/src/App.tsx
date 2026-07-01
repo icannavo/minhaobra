@@ -14,6 +14,9 @@ import SpecializedTasks from "@/pages/SpecializedTasks";
 import ProductivitySettings from "@/pages/ProductivitySettings";
 import TaskTemplates from "@/pages/TaskTemplates";
 import CreateDetailedTask from "@/pages/CreateDetailedTask";
+import EquipmentsManager from "@/pages/EquipmentsManager";
+import MaterialsManager from "@/pages/MaterialsManager";
+import ProjectKanban from "@/pages/ProjectKanban";
 import Navigation from "@/components/Navigation";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -27,6 +30,7 @@ function Router() {
       <Route path={"/schedule-setup"} component={ScheduleSetup} />
       <Route path={"/projects"} component={ProjectsList} />
       <Route path={"/project/:id"} component={ProjectDetails} />
+      <Route path={"/project/:projectId/kanban"} component={ProjectKanban} />
       <Route path={"/daily"} component={DailyDashboard} />
       <Route path={"/daily-kanban"} component={DailyKanban} />
       <Route path={"/next-day"} component={NextDayPlanning} />
@@ -34,6 +38,8 @@ function Router() {
       <Route path={"/tasks"} component={SpecializedTasks} />
       <Route path={"/task-templates"} component={TaskTemplates} />
       <Route path={"/create-detailed-task"} component={CreateDetailedTask} />
+      <Route path={"/equipments"} component={EquipmentsManager} />
+      <Route path={"/materials"} component={MaterialsManager} />
       <Route path={"/productivity"} component={ProductivitySettings} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, ChevronRight, Briefcase, Plus } from "lucide-react";
+import { Calendar, MapPin, ChevronRight, Briefcase, Plus, Edit, Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { EditWorkDialog } from "@/components/EditWorkDialog";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface Project {
   id: string;
@@ -45,9 +47,32 @@ const itemVariants = {
 
 export default function ProjectsList() {
   const [, navigate] = useLocation();
+  const [editingWork, setEditingWork] = useState<any>(null);
   
   // Buscar obras REAIS do banco de dados
-  const { data: worksData, isLoading } = trpc.works.getAll.useQuery();
+  const { data: worksData, isLoading, refetch } = trpc.works.getAll.useQuery();
+  
+  const deleteMutation = trpc.works.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Obra excluída com sucesso!");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(`Erro ao excluir: ${error.message}`);
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (confirm("Tem certeza que deseja excluir esta obra? Esta ação não pode ser desfeita.")) {
+      deleteMutation.mutate({ id });
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, work: any) => {
+    e.stopPropagation();
+    setEditingWork(work);
+  };
   
   // Mapear dados do banco para o formato da interface
   const projects: Project[] = (worksData || []).map((work) => {
@@ -216,9 +241,27 @@ export default function ProjectsList() {
                         <span className="truncate">{project.location}</span>
                       </div>
                     </div>
-                    <span className={`status-badge ${config.className}`}>
-                      {config.label}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleEdit(e, worksData?.find(w => w.id.toString() === project.id))}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDelete(e, parseInt(project.id))}
+                        className="text-slate-400 hover:text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <span className={`status-badge ${config.className}`}>
+                        {config.label}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Progress Bar */}
@@ -276,6 +319,16 @@ export default function ProjectsList() {
           </motion.div>
         )}
       </div>
+
+      {/* Edit Dialog */}
+      {editingWork && (
+        <EditWorkDialog
+          work={editingWork}
+          open={!!editingWork}
+          onOpenChange={(open) => !open && setEditingWork(null)}
+          onSuccess={refetch}
+        />
+      )}
     </div>
   );
 }

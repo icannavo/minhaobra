@@ -62,9 +62,10 @@ export default function CreateDetailedTask() {
   );
 
   const createMutation = trpc.detailedTasks.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Tarefa criada com sucesso!");
-      navigate("/daily");
+      // PASSO 19: Redirecionar com taskId para highlight
+      navigate(`/daily?date=${formData.date}&taskId=${data.id}`);
     },
     onError: (error) => {
       toast.error("Erro ao criar tarefa: " + error.message);
