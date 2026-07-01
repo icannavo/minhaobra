@@ -584,6 +584,21 @@ const dailySchedulesRouter = router({
   generate: protectedProcedure
     .input(z.object({ workId: z.number(), date: z.string() }))
     .mutation(({ input }) => db.generateDailySchedule(input.workId, input.date)),
+  confirmPlanning: protectedProcedure
+    .input(
+      z.object({
+        workId: z.number(),
+        date: z.string(),
+        scheduledTasks: z.array(
+          z.object({
+            detailedTaskId: z.number(),
+            scheduledStartTime: z.string(),
+            slotOrder: z.number(),
+          })
+        ),
+      })
+    )
+    .mutation(({ input }) => db.confirmDailyPlanning(input.workId, input.date, input.scheduledTasks)),
 });
 
 /**

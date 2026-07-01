@@ -1172,7 +1172,8 @@ export default function Catalog() {
                       id="quantityInStock"
                       name="quantityInStock"
                       type="number"
-                      step="0.01"
+                      step="1"
+                      min="0"
                       defaultValue={editingEpi?.quantityInStock || 0}
                     />
                   </div>
@@ -1184,7 +1185,8 @@ export default function Catalog() {
                     id="minStockLevel"
                     name="minStockLevel"
                     type="number"
-                    step="0.01"
+                    step="1"
+                    min="0"
                     defaultValue={editingEpi?.minStockLevel}
                   />
                 </div>

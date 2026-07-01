@@ -83,6 +83,13 @@ export default function TaskTemplates() {
   const [editingStep, setEditingStep] = useState<any>(null);
   const [requiresCooldown, setRequiresCooldown] = useState(false);
 
+  // PASSO 11: Estados para vincular equipamentos
+  const [isLinkEquipmentDialogOpen, setIsLinkEquipmentDialogOpen] = useState(false);
+  const [selectedStepForLink, setSelectedStepForLink] = useState<any>(null);
+
+  // PASSO 12: Estados para vincular materiais
+  const [isLinkMaterialDialogOpen, setIsLinkMaterialDialogOpen] = useState(false);
+
   const { data: classes = [], isLoading: loadingClasses, refetch: refetchClasses } = trpc.taskClasses.getAll.useQuery();
   const { data: subclasses = [], isLoading: loadingSubclasses, refetch: refetchSubclasses } = trpc.taskSubclasses.getByClass.useQuery(
     { classId: selectedClass?.id },
@@ -94,15 +101,21 @@ export default function TaskTemplates() {
   );
 
   // PASSO 6: Buscar equipamentos e materiais do step selecionado
-  const { data: stepEquipments = [], isLoading: loadingStepEquipments } = trpc.stepEquipments.getByStep.useQuery(
+  const { data: stepEquipments = [], isLoading: loadingStepEquipments, refetch: refetchStepEquipments } = trpc.stepEquipments.getByStep.useQuery(
     { stepId: selectedStep?.id },
     { enabled: !!selectedStep }
   );
 
-  const { data: stepMaterials = [], isLoading: loadingStepMaterials } = trpc.stepMaterials.getByStep.useQuery(
+  const { data: stepMaterials = [], isLoading: loadingStepMaterials, refetch: refetchStepMaterials } = trpc.stepMaterials.getByStep.useQuery(
     { stepId: selectedStep?.id },
     { enabled: !!selectedStep }
   );
+
+  // PASSO 11: Buscar todos os equipamentos disponíveis
+  const { data: allEquipments = [] } = trpc.equipments.getAll.useQuery();
+
+  // PASSO 12: Buscar todos os materiais disponíveis
+  const { data: allMaterials = [] } = trpc.materials.getAll.useQuery();
 
   // PASSO 8: Mutations para CRUD de Classes
   const createClass = trpc.taskClasses.create.useMutation({
@@ -373,6 +386,101 @@ export default function TaskTemplates() {
     e.stopPropagation();
     if (confirm(`Tem certeza que deseja deletar a etapa "${step.name}"?\n\nEsta ação não pode ser desfeita.`)) {
       deleteStep.mutate({ id: step.id });
+    }
+  };
+
+  // PASSO 11: Mutations para vincular equipamentos
+  const addStepEquipment = trpc.stepEquipments.add.useMutation({
+    onSuccess: () => {
+      refetchStepEquipments();
+      toast.success("Equipamento vinculado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error(`Erro ao vincular equipamento: ${error.message}`);
+    },
+  });
+
+  const removeStepEquipment = trpc.stepEquipments.remove.useMutation({
+    onSuccess: () => {
+      refetchStepEquipments();
+      toast.success("Equipamento removido!");
+    },
+    onError: (error) => {
+      toast.error(`Erro ao remover equipamento: ${error.message}`);
+    },
+  });
+
+  // PASSO 11: Handler para adicionar equipamento
+  const handleAddEquipment = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedStepForLink) return;
+
+    const formData = new FormData(e.currentTarget);
+    
+    addStepEquipment.mutate({
+      stepId: selectedStepForLink.id,
+      equipmentId: parseInt(formData.get("equipmentId") as string),
+      quantity: parseInt(formData.get("quantity") as string) || 1,
+      required: formData.get("required") === "on",
+    });
+
+    setIsLinkEquipmentDialogOpen(false);
+  };
+
+  // PASSO 11: Handler para remover equipamento
+  const handleRemoveEquipment = (equipmentLinkId: number) => {
+    if (confirm("Remover este equipamento da etapa?")) {
+      removeStepEquipment.mutate({ id: equipmentLinkId });
+    }
+  };
+
+  // PASSO 12: Mutations para vincular materiais
+  const addStepMaterial = trpc.stepMaterials.add.useMutation({
+    onSuccess: () => {
+      refetchStepMaterials();
+      toast.success("Material vinculado com sucesso!");
+      setIsLinkMaterialDialogOpen(false);
+    },
+    onError: (error) => {
+      toast.error(`Erro ao vincular material: ${error.message}`);
+    },
+  });
+
+  const removeStepMaterial = trpc.stepMaterials.remove.useMutation({
+    onSuccess: () => {
+      refetchStepMaterials();
+      toast.success("Material removido!");
+    },
+    onError: (error) => {
+      toast.error(`Erro ao remover material: ${error.message}`);
+    },
+  });
+
+  // PASSO 12: Handler para adicionar material
+  const handleAddMaterial = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedStepForLink) return;
+
+    const formData = new FormData(e.currentTarget);
+    const materialId = formData.get("materialId") ? parseInt(formData.get("materialId") as string) : undefined;
+    
+    // Buscar nome e unidade do material selecionado
+    const selectedMaterial = allMaterials.find((m: any) => m.id === materialId);
+    
+    addStepMaterial.mutate({
+      stepId: selectedStepForLink.id,
+      materialId: materialId,
+      materialName: formData.get("materialName") as string || selectedMaterial?.name || "",
+      quantity: parseFloat(formData.get("quantity") as string) || 1,
+      unit: formData.get("unit") as string || selectedMaterial?.unit || "un",
+      required: formData.get("required") === "on",
+    });
+  };
+
+  // PASSO 12: Handler para remover material
+  const handleRemoveMaterial = (materialLinkId: number) => {
+    if (confirm("Remover este material da etapa?")) {
+      removeStepMaterial.mutate({ id: materialLinkId });
     }
   };
 
@@ -732,6 +840,19 @@ export default function TaskTemplates() {
                           <Wrench className="w-4 h-4" />
                           Equipamentos
                         </label>
+                        {/* PASSO 11: Botão adicionar equipamento */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 h-7 text-xs"
+                          onClick={() => {
+                            setSelectedStepForLink(selectedStep);
+                            setIsLinkEquipmentDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="w-3 h-3" />
+                          Adicionar
+                        </Button>
                       </div>
                       
                       {loadingStepEquipments ? (
@@ -743,22 +864,31 @@ export default function TaskTemplates() {
                           {stepEquipments.map((se: any) => (
                             <div
                               key={se.id}
-                              className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg"
+                              className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg group"
                             >
-                              <div className="flex items-center gap-2">
-                                <Wrench className="w-4 h-4 text-purple-400" />
-                                <span className="text-sm text-slate-200">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Wrench className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                                <span className="text-sm text-slate-200 truncate">
                                   {se.equipment?.name || `Equipamento #${se.equipmentId}`}
                                 </span>
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs flex-shrink-0">
                                   Qtd: {se.quantity}
                                 </Badge>
                                 {se.required && (
-                                  <Badge variant="destructive" className="text-xs">
+                                  <Badge variant="destructive" className="text-xs flex-shrink-0">
                                     Obrigatório
                                   </Badge>
                                 )}
                               </div>
+                              {/* PASSO 11: Botão remover equipamento */}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                onClick={() => handleRemoveEquipment(se.id)}
+                              >
+                                <X className="w-3 h-3 text-red-400" />
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -776,6 +906,19 @@ export default function TaskTemplates() {
                           <Package className="w-4 h-4" />
                           Materiais
                         </label>
+                        {/* PASSO 12: Botão adicionar material */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 h-7 text-xs"
+                          onClick={() => {
+                            setSelectedStepForLink(selectedStep);
+                            setIsLinkMaterialDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="w-3 h-3" />
+                          Adicionar
+                        </Button>
                       </div>
                       
                       {loadingStepMaterials ? (
@@ -787,20 +930,29 @@ export default function TaskTemplates() {
                           {stepMaterials.map((sm: any) => (
                             <div
                               key={sm.id}
-                              className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg"
+                              className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg group"
                             >
-                              <div className="flex items-center gap-2">
-                                <Package className="w-4 h-4 text-cyan-400" />
-                                <span className="text-sm text-slate-200">{sm.materialName}</span>
-                                <Badge variant="outline" className="text-xs">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Package className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                                <span className="text-sm text-slate-200 truncate">{sm.materialName}</span>
+                                <Badge variant="outline" className="text-xs flex-shrink-0">
                                   {sm.quantity} {sm.unit}
                                 </Badge>
                                 {sm.required && (
-                                  <Badge variant="destructive" className="text-xs">
+                                  <Badge variant="destructive" className="text-xs flex-shrink-0">
                                     Obrigatório
                                   </Badge>
                                 )}
                               </div>
+                              {/* PASSO 12: Botão remover material */}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                onClick={() => handleRemoveMaterial(sm.id)}
+                              >
+                                <X className="w-3 h-3 text-red-400" />
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -1322,6 +1474,213 @@ export default function TaskTemplates() {
                   </>
                 ) : (
                   editingStep ? "Atualizar" : "Criar"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* PASSO 11: Dialog para Vincular Equipamento ao Step */}
+      <Dialog open={isLinkEquipmentDialogOpen} onOpenChange={setIsLinkEquipmentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Equipamento</DialogTitle>
+            {selectedStepForLink && (
+              <p className="text-sm text-slate-400 mt-2">
+                Etapa: <span className="text-primary font-semibold">{selectedStepForLink.name}</span>
+              </p>
+            )}
+          </DialogHeader>
+          
+          <form onSubmit={handleAddEquipment}>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="equipmentId">Equipamento *</Label>
+                <Select name="equipmentId" required>
+                  <SelectTrigger id="equipmentId" className="mt-1.5">
+                    <SelectValue placeholder="Selecione um equipamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allEquipments.map((eq: any) => (
+                      <SelectItem key={eq.id} value={eq.id.toString()}>
+                        {eq.name} ({eq.category})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="equipment-quantity">Quantidade *</Label>
+                <Input
+                  id="equipment-quantity"
+                  name="quantity"
+                  type="number"
+                  min="1"
+                  defaultValue="1"
+                  required
+                  className="mt-1.5"
+                />
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="equipment-required"
+                  name="required"
+                  defaultChecked={true}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="equipment-required" className="cursor-pointer">
+                    Obrigatório
+                  </Label>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Marque se este equipamento é essencial para a etapa
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsLinkEquipmentDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={addStepEquipment.isPending}>
+                {addStepEquipment.isPending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Adicionando...
+                  </>
+                ) : (
+                  "Adicionar"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* PASSO 12: Dialog para Vincular Material ao Step */}
+      <Dialog open={isLinkMaterialDialogOpen} onOpenChange={setIsLinkMaterialDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Material</DialogTitle>
+            {selectedStepForLink && (
+              <p className="text-sm text-slate-400 mt-2">
+                Etapa: <span className="text-primary font-semibold">{selectedStepForLink.name}</span>
+              </p>
+            )}
+          </DialogHeader>
+          
+          <form onSubmit={handleAddMaterial}>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="materialId">Material *</Label>
+                <Select 
+                  name="materialId" 
+                  required
+                  onValueChange={(value) => {
+                    const material = allMaterials.find((m: any) => m.id === parseInt(value));
+                    // Atualizar campo de unidade automaticamente
+                    const unitInput = document.getElementById('material-unit') as HTMLInputElement;
+                    if (unitInput && material) {
+                      unitInput.value = material.unit || 'un';
+                    }
+                  }}
+                >
+                  <SelectTrigger id="materialId" className="mt-1.5">
+                    <SelectValue placeholder="Selecione um material" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allMaterials.map((mat: any) => (
+                      <SelectItem key={mat.id} value={mat.id.toString()}>
+                        {mat.name} ({mat.category})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="material-quantity">Quantidade *</Label>
+                  <Input
+                    id="material-quantity"
+                    name="quantity"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    defaultValue="1"
+                    required
+                    className="mt-1.5"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="material-unit">Unidade *</Label>
+                  <Input
+                    id="material-unit"
+                    name="unit"
+                    type="text"
+                    defaultValue="un"
+                    required
+                    className="mt-1.5"
+                    placeholder="Ex: L, kg, m, un"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="materialName">Nome do Material (opcional)</Label>
+                <Input
+                  id="materialName"
+                  name="materialName"
+                  type="text"
+                  className="mt-1.5"
+                  placeholder="Deixe vazio para usar o nome do material selecionado"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Use apenas se quiser um nome customizado para esta etapa
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="material-required"
+                  name="required"
+                  defaultChecked={true}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="material-required" className="cursor-pointer">
+                    Obrigatório
+                  </Label>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Marque se este material é essencial para a etapa
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsLinkMaterialDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={addStepMaterial.isPending}>
+                {addStepMaterial.isPending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Adicionando...
+                  </>
+                ) : (
+                  "Adicionar"
                 )}
               </Button>
             </DialogFooter>

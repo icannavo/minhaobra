@@ -250,6 +250,19 @@ export default function NextDayPlanning() {
     { enabled: !!selectedWorkId }
   );
 
+  // Mutation para confirmar planejamento
+  const confirmPlanning = trpc.dailySchedules.confirmPlanning.useMutation({
+    onSuccess: () => {
+      toast.success(`Planejamento confirmado! ${allScheduledTasks.length} tarefas agendadas para amanhã.`);
+      // Limpar estado
+      setTimeSlotTasks({});
+      setBacklogTasks([]);
+    },
+    onError: (error) => {
+      toast.error(`Erro ao confirmar planejamento: ${error.message}`);
+    },
+  });
+
   // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -323,13 +336,32 @@ export default function NextDayPlanning() {
 
   // Confirmar planejamento
   const handleConfirmPlanning = () => {
+    if (!selectedWorkId) {
+      toast.error("Selecione um projeto primeiro");
+      return;
+    }
+
     if (allScheduledTasks.length === 0) {
       toast.error("Adicione pelo menos uma tarefa ao cronograma");
       return;
     }
 
-    // TODO: Salvar no backend
-    toast.success(`${allScheduledTasks.length} tarefas planejadas para amanhã!`);
+    // Preparar dados para envio
+    const tomorrowDate = format(tomorrow, "yyyy-MM-dd");
+    
+    const scheduledTasksData = Object.entries(timeSlotTasks).flatMap(([slotId, tasks]) =>
+      tasks.map((task, index) => ({
+        detailedTaskId: parseInt(task.id), // Assumindo que task.id é o ID da detailed_task
+        scheduledStartTime: slotId,
+        slotOrder: index,
+      }))
+    );
+
+    confirmPlanning.mutate({
+      workId: selectedWorkId,
+      date: tomorrowDate,
+      scheduledTasks: scheduledTasksData,
+    });
   };
 
   return (

@@ -69,8 +69,8 @@ export const epis = sqliteTable("epis", {
   category: text("category").notNull(), // ex: "Proteção Cabeça", "Proteção Mãos"
   unit: text("unit").notNull(), // ex: "unidade", "par"
   costPerUnit: real("costPerUnit"),
-  quantityInStock: real("quantityInStock").default(0),
-  minStockLevel: real("minStockLevel"),
+  quantityInStock: integer("quantityInStock").default(0), // INTEGER: não existe 0.5 capacete
+  minStockLevel: integer("minStockLevel"), // INTEGER: alerta com números inteiros
   description: text("description"),
   notes: text("notes"),
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),

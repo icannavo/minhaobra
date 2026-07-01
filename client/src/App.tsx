@@ -14,6 +14,7 @@ import SpecializedTasks from "@/pages/SpecializedTasks";
 import ProductivitySettings from "@/pages/ProductivitySettings";
 import TaskTemplates from "@/pages/TaskTemplates";
 import CreateDetailedTask from "@/pages/CreateDetailedTask";
+import TaskExecution from "@/pages/TaskExecution";
 import EquipmentsManager from "@/pages/EquipmentsManager";
 import MaterialsManager from "@/pages/MaterialsManager";
 import ProjectKanban from "@/pages/ProjectKanban";
@@ -38,6 +39,7 @@ function Router() {
       <Route path={"/tasks"} component={SpecializedTasks} />
       <Route path={"/task-templates"} component={TaskTemplates} />
       <Route path={"/create-detailed-task"} component={CreateDetailedTask} />
+      <Route path={"/task/:id/execute"} component={TaskExecution} />
       <Route path={"/equipments"} component={EquipmentsManager} />
       <Route path={"/materials"} component={MaterialsManager} />
       <Route path={"/productivity"} component={ProductivitySettings} />

@@ -1047,6 +1047,85 @@ export async function getScheduledTasksByDate(workId: number, date: string) {
     .where(eq(scheduledTasks.dailyScheduleId, scheduleId));
 }
 
+/**
+ * PASSO 22: Confirmar Planejamento do Próximo Dia
+ * Cria um daily_schedule e todas as scheduled_tasks de uma vez
+ */
+export async function confirmDailyPlanning(
+  workId: number,
+  date: string,
+  scheduledTasksData: Array<{ detailedTaskId: number; scheduledStartTime: string; slotOrder: number }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // 1. Verificar se já existe um daily_schedule para esta data
+  let dailySchedule = await getDailyScheduleByDate(workId, date);
+
+  // 2. Se não existir, criar um novo
+  if (!dailySchedule) {
+    const result = await db.insert(dailySchedules).values({
+      workId,
+      date,
+      status: "Planejado",
+      totalTasks: scheduledTasksData.length,
+      completedTasks: 0,
+      totalEstimatedMinutes: 0, // Será atualizado depois
+      totalActualMinutes: 0,
+      targetArea: 0, // Será atualizado depois
+      completedArea: 0,
+    });
+
+    // Buscar o schedule recém-criado
+    dailySchedule = await getDailyScheduleByDate(workId, date);
+    if (!dailySchedule) throw new Error("Failed to create daily schedule");
+  }
+
+  // 3. Deletar scheduled_tasks antigas (se existir alguma)
+  await db.delete(scheduledTasks).where(eq(scheduledTasks.dailyScheduleId, dailySchedule.id));
+
+  // 4. Criar as novas scheduled_tasks
+  const tasksToInsert = scheduledTasksData.map((task) => ({
+    dailyScheduleId: dailySchedule!.id,
+    detailedTaskId: task.detailedTaskId,
+    scheduledStartTime: task.scheduledStartTime,
+    slotOrder: task.slotOrder,
+    status: "Agendado" as const,
+  }));
+
+  if (tasksToInsert.length > 0) {
+    await db.insert(scheduledTasks).values(tasksToInsert);
+  }
+
+  // 5. Calcular totais e atualizar o daily_schedule
+  let totalEstimatedMinutes = 0;
+  let targetArea = 0;
+
+  for (const taskData of scheduledTasksData) {
+    const detailedTask = await getDetailedTaskById(taskData.detailedTaskId);
+    if (detailedTask) {
+      totalEstimatedMinutes += detailedTask.estimatedTotalMinutes || 0;
+      targetArea += detailedTask.area || 0;
+    }
+  }
+
+  await db
+    .update(dailySchedules)
+    .set({
+      totalTasks: scheduledTasksData.length,
+      totalEstimatedMinutes,
+      targetArea,
+      status: "Planejado",
+    })
+    .where(eq(dailySchedules.id, dailySchedule.id));
+
+  return {
+    success: true,
+    dailyScheduleId: dailySchedule.id,
+    tasksScheduled: scheduledTasksData.length,
+  };
+}
+
 export async function getStepEquipmentsByStepId(stepId: number) {
   const db = await getDb();
   if (!db) return [];
