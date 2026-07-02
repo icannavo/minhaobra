@@ -186,11 +186,19 @@ export const alerts = sqliteTable("alerts", {
       "EQUIPAMENTO_INDISPONIVEL",
       "CRONOGRAMA_AFETADO",
       "META_NAO_ATINGIDA",
+      "STOCK_LOW", // Estoque baixo (genérico)
+      "MATERIAL_LOW_STOCK", // Material com estoque baixo
+      "EPI_LOW_STOCK", // EPI com estoque baixo
+      "WEATHER_WARNING", // Alerta de clima
+      "TASK_DELAYED", // Tarefa atrasada (tempo > estimado)
+      "GOAL_NOT_MET", // Meta diária não atingida
     ] 
   }).notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
-  severity: text("severity", { enum: ["info", "warning", "error"] }).default("warning"),
+  severity: text("severity", { enum: ["low", "medium", "high", "critical"] }).default("medium"),
+  relatedId: integer("relatedId"), // ID da entidade relacionada (material, tarefa, etc)
+  metadata: text("metadata"), // JSON com dados adicionais
   isRead: integer("isRead", { mode: "boolean" }).default(false),
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });

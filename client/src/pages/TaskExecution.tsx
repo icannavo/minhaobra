@@ -151,6 +151,20 @@ export default function TaskExecution() {
     },
   });
 
+  const completeTaskMutation = trpc.detailedTasks.update.useMutation({
+    onSuccess: () => {
+      refetchTask();
+      toast.success("Tarefa concluída com sucesso! 🎉");
+      // Redirecionar para o dashboard após 2 segundos
+      setTimeout(() => {
+        navigate("/daily");
+      }, 2000);
+    },
+    onError: (error) => {
+      toast.error(`Erro ao concluir tarefa: ${error.message}`);
+    },
+  });
+
   // Timer que atualiza a cada segundo
   useEffect(() => {
     const interval = setInterval(() => {
@@ -248,6 +262,21 @@ export default function TaskExecution() {
       materialId: selectedMaterial.id,
       actualQuantity: materialQuantity,
       notes: materialNotes || undefined,
+    });
+  };
+
+  const handleCompleteTask = () => {
+    if (!taskId) return;
+    
+    // Verificar se todos os steps foram concluídos
+    if (completedSteps < totalSteps) {
+      toast.error("Conclua todas as etapas antes de finalizar a tarefa");
+      return;
+    }
+
+    completeTaskMutation.mutate({
+      id: taskId,
+      status: "Concluído",
     });
   };
 
@@ -560,9 +589,18 @@ export default function TaskExecution() {
                   Clique no botão para finalizar esta tarefa.
                 </p>
               </div>
-              <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700">
-                <CheckCircle2 className="w-5 h-5" />
-                Concluir Tarefa
+              <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={handleCompleteTask} disabled={completeTaskMutation.isPending}>
+                {completeTaskMutation.isPending ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Finalizando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    Concluir Tarefa
+                  </>
+                )}
               </Button>
             </div>
           </Card>

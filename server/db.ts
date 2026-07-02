@@ -360,16 +360,109 @@ export async function getAllAlerts(unreadOnly = false) {
   return db.select().from(alerts).orderBy(desc(alerts.createdAt));
 }
 
-export async function createAlert(alertData: any) {
+export async function getAlertsByWork(workId: number, unreadOnly = false) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(alerts.workId, workId)];
+  
+  if (unreadOnly) {
+    conditions.push(eq(alerts.isRead, false));
+  }
+
+  return db
+    .select()
+    .from(alerts)
+    .where(and(...conditions))
+    .orderBy(desc(alerts.createdAt));
+}
+
+export async function getUnreadCount(workId?: number) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions = [eq(alerts.isRead, false)];
+  
+  if (workId) {
+    conditions.push(eq(alerts.workId, workId));
+  }
+
+  const results = await db
+    .select()
+    .from(alerts)
+    .where(and(...conditions));
+    
+  return results.length;
+}
+
+interface CreateAlertData {
+  workId?: number;
+  type: 
+    | "TAREFA_DESVIO_NEGATIVO"
+    | "TAREFA_ATRASADA"
+    | "EQUIPAMENTO_INDISPONIVEL"
+    | "CRONOGRAMA_AFETADO"
+    | "META_NAO_ATINGIDA"
+    | "STOCK_LOW"
+    | "MATERIAL_LOW_STOCK"
+    | "EPI_LOW_STOCK"
+    | "WEATHER_WARNING"
+    | "TASK_DELAYED"
+    | "GOAL_NOT_MET";
+  title: string;
+  message: string;
+  severity?: "low" | "medium" | "high" | "critical";
+  relatedId?: number;
+  metadata?: any;
+}
+
+export async function createAlert(data: CreateAlertData) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(alerts).values(alertData);
+  
+  const alertData = {
+    workId: data.workId || null,
+    type: data.type,
+    title: data.title,
+    message: data.message,
+    severity: data.severity || "medium",
+    relatedId: data.relatedId || null,
+    metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+    isRead: false,
+  };
+  
+  const result = await db.insert(alerts).values(alertData).returning();
+  
+  // TODO: Futuro - Enviar notificação via WebSocket
+  console.log(`🚨 ALERTA CRIADO: [${data.severity?.toUpperCase()}] ${data.title}`);
+  
+  return result[0];
 }
 
 export async function markAlertAsRead(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.update(alerts).set({ isRead: true }).where(eq(alerts.id, id));
+}
+
+export async function markAllAlertsAsRead(workId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  if (workId) {
+    return db
+      .update(alerts)
+      .set({ isRead: true })
+      .where(eq(alerts.workId, workId));
+  }
+  
+  return db.update(alerts).set({ isRead: true });
+}
+
+export async function deleteAlert(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(alerts).where(eq(alerts.id, id));
 }
 
 /**
@@ -687,7 +780,104 @@ export async function createDetailedTask(data: any) {
 export async function updateDetailedTask(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.update(detailedTasks).set(data).where(eq(detailedTasks.id, id));
+  
+  // Atualizar detailed_task
+  await db.update(detailedTasks).set(data).where(eq(detailedTasks.id, id));
+  
+  // Se status foi alterado para "Concluído", atualizar scheduled_task e daily_schedule
+  if (data.status === "Concluído") {
+    try {
+      // Buscar a detailed_task para obter os dados
+      const [task] = await db
+        .select()
+        .from(detailedTasks)
+        .where(eq(detailedTasks.id, id))
+        .limit(1);
+      
+      if (task) {
+        // PASSO 32: Criar registro de produtividade
+        const targetArea = Number(task.area) || 0;
+        const completedArea = Number(task.area) || 0; // Assumindo que completou a área total
+        const deviation = completedArea - targetArea;
+        const deviationPercent = targetArea > 0 ? (deviation / targetArea) * 100 : 0;
+        const productivity = task.numberOfEmployees > 0 
+          ? completedArea / task.numberOfEmployees 
+          : 0;
+
+        await createProductivityRecord({
+          workId: task.workId,
+          date: task.date,
+          taskName: task.taskName,
+          targetArea: targetArea,
+          completedArea: completedArea,
+          deviation: deviation,
+          deviationPercent: deviationPercent,
+          numberOfEmployees: task.numberOfEmployees || 1,
+          productivity: productivity,
+          weather: task.weather || undefined,
+          notes: `Tarefa concluída. Tempo estimado: ${task.estimatedTotalMinutes}min, Real: ${task.actualTotalMinutes}min`,
+        });
+
+        // Atualizar scheduled_task correspondente (se existir)
+        const scheduledTasksForThisDetail = await db
+          .select()
+          .from(scheduledTasks)
+          .where(eq(scheduledTasks.detailedTaskId, id));
+        
+        for (const st of scheduledTasksForThisDetail) {
+          await db
+            .update(scheduledTasks)
+            .set({ 
+              status: "Concluído",
+              actualEndTime: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(scheduledTasks.id, st.id));
+          
+          // Atualizar daily_schedule
+          if (st.dailyScheduleId) {
+            // Buscar todas as tarefas do dia para recalcular
+            const allScheduledTasksOfDay = await db
+              .select()
+              .from(scheduledTasks)
+              .where(eq(scheduledTasks.dailyScheduleId, st.dailyScheduleId));
+            
+            const completedCount = allScheduledTasksOfDay.filter((t: any) => t.status === "Concluído").length;
+            
+            // Somar área completada
+            let completedArea = 0;
+            for (const st2 of allScheduledTasksOfDay) {
+              if (st2.status === "Concluído") {
+                const [dt] = await db
+                  .select()
+                  .from(detailedTasks)
+                  .where(eq(detailedTasks.id, st2.detailedTaskId))
+                  .limit(1);
+                if (dt) {
+                  completedArea += Number(dt.area) || 0;
+                }
+              }
+            }
+            
+            // Atualizar daily_schedule
+            await db
+              .update(dailySchedules)
+              .set({ 
+                completedTasks: completedCount,
+                completedArea: completedArea,
+                updatedAt: new Date(),
+              })
+              .where(eq(dailySchedules.id, st.dailyScheduleId));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar scheduled_task/daily_schedule/productivity:", err);
+      // Não falhar a operação principal se isso der erro
+    }
+  }
+  
+  return db.select().from(detailedTasks).where(eq(detailedTasks.id, id));
 }
 
 export async function deleteDetailedTask(id: number) {
@@ -721,6 +911,9 @@ export async function startStepExecution(detailedTaskId: number, stepId: number)
   });
 }
 
+/**
+ * PASSO 27 & 30: Concluir step e atualizar tempo total da tarefa
+ */
 export async function completeStepExecution(executionId: number, notes?: string, issues?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -733,13 +926,33 @@ export async function completeStepExecution(executionId: number, notes?: string,
   const endTime = new Date();
   const durationMinutes = startTime ? Math.floor((endTime.getTime() - new Date(startTime).getTime()) / 60000) : 0;
   
-  return db.update(stepExecutions).set({
+  // Atualizar a execução do step
+  await db.update(stepExecutions).set({
     endTime,
     durationMinutes,
     status: "Concluído" as any,
     notes,
     issues,
   }).where(eq(stepExecutions.id, executionId));
+  
+  // PASSO 30: Atualizar o tempo total da detailed_task
+  const detailedTaskId = execution[0].detailedTaskId;
+  
+  // Buscar todas as execuções desta tarefa para calcular tempo total
+  const allExecutions = await db
+    .select()
+    .from(stepExecutions)
+    .where(eq(stepExecutions.detailedTaskId, detailedTaskId));
+  
+  const totalActualMinutes = allExecutions.reduce((sum, ex) => sum + (ex.durationMinutes || 0), 0);
+  
+  // Atualizar tempo total real na detailed_task
+  await db
+    .update(detailedTasks)
+    .set({ actualTotalMinutes: totalActualMinutes })
+    .where(eq(detailedTasks.id, detailedTaskId));
+  
+  return { success: true, durationMinutes, totalActualMinutes };
 }
 
 /**
@@ -1344,10 +1557,58 @@ export async function getMaterialConsumptions(detailedTaskId: number) {
     .where(eq(materialConsumptions.detailedTaskId, detailedTaskId));
 }
 
+/**
+ * PASSO 29: Registrar consumo de material E atualizar estoque automaticamente
+ */
 export async function recordMaterialConsumption(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(materialConsumptions).values(data);
+  
+  // 1. Inserir o registro de consumo
+  const result = await db.insert(materialConsumptions).values(data);
+  
+  // 2. Atualizar estoque do material (diminuir)
+  if (data.materialId && data.actualQuantity) {
+    // Buscar material atual para verificar estoque
+    const materialResult = await db
+      .select()
+      .from(materials)
+      .where(eq(materials.id, data.materialId))
+      .limit(1);
+    
+    if (materialResult.length > 0) {
+      const material = materialResult[0];
+      const currentStock = material.quantityInStock || 0;
+      const newStock = Math.max(0, currentStock - data.actualQuantity); // Não permite negativo
+      
+      // Atualizar o estoque
+      await db
+        .update(materials)
+        .set({ quantityInStock: newStock })
+        .where(eq(materials.id, data.materialId));
+      
+      // PASSO 34: Criar alerta se estoque ficou baixo
+      if (material.minStockLevel && newStock < material.minStockLevel) {
+        await createAlert({
+          workId: material.workId,
+          type: "MATERIAL_LOW_STOCK",
+          severity: newStock === 0 ? "critical" : "medium",
+          title: newStock === 0 ? "Material sem estoque!" : "Estoque baixo de material",
+          message: `${material.name}: ${newStock} ${material.unit} restantes (mínimo: ${material.minStockLevel} ${material.unit})`,
+          relatedId: data.materialId,
+          metadata: {
+            materialId: data.materialId,
+            materialName: material.name,
+            currentStock: newStock,
+            minStock: material.minStockLevel,
+            unit: material.unit,
+          },
+        });
+      }
+    }
+  }
+  
+  return result;
 }
 
 export async function updateMaterialConsumption(id: number, data: any) {
@@ -1438,7 +1699,7 @@ export async function rescheduleIncompleteTasks(workId: number, fromDate: string
       type: "TAREFA_ATRASADA",
       title: "Tarefa Reagendada",
       message: `A tarefa "${task.taskName}" foi reagendada de ${fromDate} para ${nextDateStr}`,
-      severity: "warning",
+      severity: "medium",
     });
   }
 

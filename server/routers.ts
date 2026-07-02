@@ -303,12 +303,32 @@ const productivityRouter = router({
  */
 const alertsRouter = router({
   getAll: publicProcedure
-    .input(z.object({ unreadOnly: z.boolean().optional() }).optional())
-    .query(({ input }) => db.getAllAlerts(input?.unreadOnly)),
+    .input(z.object({ 
+      workId: z.number().optional(),
+      unreadOnly: z.boolean().optional() 
+    }).optional())
+    .query(({ input }) => {
+      if (input?.workId) {
+        return db.getAlertsByWork(input.workId, input.unreadOnly);
+      }
+      return db.getAllAlerts(input?.unreadOnly);
+    }),
+
+  getUnreadCount: publicProcedure
+    .input(z.object({ workId: z.number().optional() }).optional())
+    .query(({ input }) => db.getUnreadCount(input?.workId)),
 
   markAsRead: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => db.markAlertAsRead(input.id)),
+
+  markAllAsRead: protectedProcedure
+    .input(z.object({ workId: z.number().optional() }).optional())
+    .mutation(({ input }) => db.markAllAlertsAsRead(input?.workId)),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => db.deleteAlert(input.id)),
 });
 
 /**

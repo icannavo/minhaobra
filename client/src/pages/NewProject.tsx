@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Save,
   Trash,
-  Cloud
+  Cloud,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ interface FormData {
     tools: string[];
     materials: string[];
     equipment: string[];
+    team: string[];
   };
   rooms: Room[];
   name: string;
@@ -131,7 +133,7 @@ export default function NewProject() {
   
   const [formData, setFormData] = useState<FormData>({
     type: "",
-    items: { epis: [], tools: [], materials: [], equipment: [] },
+    items: { epis: [], tools: [], materials: [], equipment: [], team: [] },
     rooms: [],
     name: "",
     location: "",
@@ -171,6 +173,34 @@ export default function NewProject() {
       toast.error("Erro ao criar obra: " + error.message);
     }
   });
+
+  // ==================== CALLBACKS (MUST BE BEFORE CONDITIONAL RETURNS) ====================
+  const addRoom = useCallback(() => {
+    const newRoom: Room = {
+      id: Date.now().toString(),
+      name: "",
+      area: 0,
+      floorType: "",
+      characteristics: []
+    };
+    setFormData(prev => ({ ...prev, rooms: [...prev.rooms, newRoom] }));
+  }, []);
+
+  const updateRoom = useCallback((id: string, field: keyof Room, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.map(room => 
+        room.id === id ? { ...room, [field]: value } : room
+      )
+    }));
+  }, []);
+
+  const removeRoom = useCallback((id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.filter(room => room.id !== id)
+    }));
+  }, []);
 
   // Show loading state while checking authentication or loading draft
   if ((isOAuthConfigured && authLoading) || isDraftLoading) {
@@ -257,33 +287,6 @@ export default function NewProject() {
       estimatedEndDate: calculateEndDate()
     });
   };
-
-  const addRoom = useCallback(() => {
-    const newRoom: Room = {
-      id: Date.now().toString(),
-      name: "",
-      area: 0,
-      floorType: "",
-      characteristics: []
-    };
-    setFormData(prev => ({ ...prev, rooms: [...prev.rooms, newRoom] }));
-  }, []);
-
-  const updateRoom = useCallback((id: string, field: keyof Room, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.map(room => 
-        room.id === id ? { ...room, [field]: value } : room
-      )
-    }));
-  }, []);
-
-  const removeRoom = useCallback((id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.filter(room => room.id !== id)
-    }));
-  }, []);
 
   const toggleItem = (category: keyof FormData['items'], item: string) => {
     const currentItems = formData.items[category];
@@ -390,34 +393,202 @@ export default function NewProject() {
 
   // ==================== STEP 2: ITEMS ====================
   const Step2Items = () => {
-    const ItemCategory = ({ title, category, items }: { 
+    // Buscar dados reais do banco
+    const { data: episData = [], isLoading: loadingEpis } = trpc.epis.getAll.useQuery();
+    const { data: equipmentsData = [], isLoading: loadingEquipments } = trpc.equipments.getAll.useQuery();
+    const { data: materialsData = [], isLoading: loadingMaterials } = trpc.materials.getAll.useQuery();
+    const { data: teamMembersData = [], isLoading: loadingTeam } = trpc.teamMembers.getAll.useQuery();
+
+    const ItemCategory = ({ 
+      title, 
+      category, 
+      items, 
+      isLoading,
+      showAvailability = false 
+    }: { 
       title: string; 
       category: keyof FormData['items']; 
-      items: string[] 
-    }) => (
-      <div className="modern-card p-6">
-        <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
-        <div className="flex flex-wrap gap-2">
-          {items.map(item => {
-            const isSelected = formData.items[category].includes(item);
-            
-            return (
+      items: any[];
+      isLoading: boolean;
+      showAvailability?: boolean;
+    }) => {
+      const selectedItems = formData.items[category];
+      
+      const selectAll = () => {
+        const allIds = items.map(item => item.id.toString());
+        setFormData({
+          ...formData,
+          items: { ...formData.items, [category]: allIds }
+        });
+      };
+
+      const deselectAll = () => {
+        setFormData({
+          ...formData,
+          items: { ...formData.items, [category]: [] }
+        });
+      };
+
+      return (
+        <div className="modern-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-white">{title}</h3>
+            <div className="flex gap-2">
               <button
-                key={item}
-                onClick={() => toggleItem(category, item)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  isSelected
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
-                }`}
+                onClick={selectAll}
+                className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors flex items-center gap-1"
               >
-                {item}
+                <Check className="w-3 h-3" />
+                Selecionar tudo
               </button>
-            );
-          })}
+              <button
+                onClick={deselectAll}
+                className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />
+                Deselecionar tudo
+              </button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs text-slate-400">Carregando...</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {items.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhum item cadastrado</p>
+              ) : (
+                items.map(item => {
+                  const isSelected = selectedItems.includes(item.id.toString());
+                  const isAvailable = !showAvailability || !item.isInUse;
+                  
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => toggleItem(category, item.id.toString())}
+                      disabled={!isAvailable}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative ${
+                        isSelected
+                          ? 'bg-primary text-white'
+                          : isAvailable
+                          ? 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-800/30 text-slate-600 cursor-not-allowed'
+                      }`}
+                    >
+                      {item.name}
+                      {!isAvailable && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" title="Em uso em outra obra" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
-      </div>
-    );
+      );
+    };
+
+    // Componente especial para membros da equipe
+    const TeamMembersCategory = () => {
+      const selectedTeam = formData.items.team || [];
+      
+      const selectAll = () => {
+        const allIds = teamMembersData.map(member => member.id.toString());
+        setFormData({
+          ...formData,
+          items: { ...formData.items, team: allIds }
+        });
+      };
+
+      const deselectAll = () => {
+        setFormData({
+          ...formData,
+          items: { ...formData.items, team: [] }
+        });
+      };
+
+      return (
+        <div className="modern-card p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Equipe
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={selectAll}
+                className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+              >
+                <Check className="w-3 h-3" />
+                Selecionar tudo
+              </button>
+              <button
+                onClick={deselectAll}
+                className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />
+                Deselecionar tudo
+              </button>
+            </div>
+          </div>
+
+          {loadingTeam ? (
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs text-slate-400">Carregando membros da equipe...</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {teamMembersData.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhum membro cadastrado</p>
+              ) : (
+                teamMembersData.map(member => {
+                  const isSelected = selectedTeam.includes(member.id.toString());
+                  // Membros da equipe podem estar em múltiplas obras (engenheiro, arquiteto, etc.)
+                  const canBeShared = ['engenheiro', 'arquiteto', 'supervisor'].includes(member.role?.toLowerCase() || '');
+                  
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => {
+                        const newTeam = isSelected
+                          ? selectedTeam.filter(id => id !== member.id.toString())
+                          : [...selectedTeam, member.id.toString()];
+                        
+                        setFormData({
+                          ...formData,
+                          items: { ...formData.items, team: newTeam }
+                        });
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                        isSelected
+                          ? 'bg-primary text-white'
+                          : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      <div className="flex flex-col items-start">
+                        <span>{member.name}</span>
+                        <span className="text-xs opacity-70">{member.role || 'Membro'}</span>
+                      </div>
+                      {canBeShared && (
+                        <span className="text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded" title="Pode estar em múltiplas obras">
+                          Multi
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="space-y-6">
@@ -427,10 +598,35 @@ export default function NewProject() {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ItemCategory title="EPIs" category="epis" items={AVAILABLE_ITEMS.epis} />
-          <ItemCategory title="Ferramentas" category="tools" items={AVAILABLE_ITEMS.tools} />
-          <ItemCategory title="Materiais" category="materials" items={AVAILABLE_ITEMS.materials} />
-          <ItemCategory title="Equipamentos" category="equipment" items={AVAILABLE_ITEMS.equipment} />
+          <ItemCategory 
+            title="EPIs" 
+            category="epis" 
+            items={episData} 
+            isLoading={loadingEpis}
+          />
+          <ItemCategory 
+            title="Ferramentas" 
+            category="tools" 
+            items={equipmentsData.filter((e: any) => e.category?.toLowerCase().includes('ferramenta'))} 
+            isLoading={loadingEquipments}
+          />
+          <ItemCategory 
+            title="Materiais" 
+            category="materials" 
+            items={materialsData} 
+            isLoading={loadingMaterials}
+            showAvailability={true}
+          />
+          <ItemCategory 
+            title="Equipamentos" 
+            category="equipment" 
+            items={equipmentsData.filter((e: any) => !e.category?.toLowerCase().includes('ferramenta'))} 
+            isLoading={loadingEquipments}
+            showAvailability={true}
+          />
+          
+          {/* Seção de Equipe */}
+          <TeamMembersCategory />
         </div>
       </div>
     );
@@ -507,7 +703,7 @@ export default function NewProject() {
               <Layers className="w-5 h-5 text-primary" />
               Itens Selecionados
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <p className="text-sm text-slate-400 mb-2">EPIs ({formData.items.epis.length})</p>
                 <div className="flex flex-wrap gap-1">
@@ -552,6 +748,18 @@ export default function NewProject() {
                   ) : (
                     formData.items.equipment.map(item => (
                       <span key={item} className="tag tag-orange text-xs">{item}</span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-slate-400 mb-2">Equipe ({formData.items.team?.length || 0})</p>
+                <div className="flex flex-wrap gap-1">
+                  {(!formData.items.team || formData.items.team.length === 0) ? (
+                    <span className="text-xs text-slate-600">Nenhum</span>
+                  ) : (
+                    formData.items.team.map(item => (
+                      <span key={item} className="tag tag-cyan text-xs">{item}</span>
                     ))
                   )}
                 </div>
@@ -629,7 +837,7 @@ export default function NewProject() {
                   // Resetar formulário
                   setFormData({
                     type: "",
-                    items: { epis: [], tools: [], materials: [], equipment: [] },
+                    items: { epis: [], tools: [], materials: [], equipment: [], team: [] },
                     rooms: [],
                     name: "",
                     location: "",
